@@ -14,7 +14,7 @@ Vcs-Browser: https://github.com/drhelius/Gearsystem
 Vcs-Git: https://github.com/drhelius/Gearsystem.git
 
 Package: gearsystem
-Architecture: amd64 i386 arm64 armhf
+Architecture: amd64 amd64v3 i386 arm64 armhf
 Depends:
  ${misc:Depends},
  ${shlibs:Depends}
