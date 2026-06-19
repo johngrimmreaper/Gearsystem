@@ -1,7 +1,7 @@
-gearsystem (3.4.1-1~ppa1~noble1) noble; urgency=medium
+gearsystem (3.9.9-1~ppa1) UNRELEASED; urgency=medium
 
-  * Initial PPA build for Noble.
-  * Add Debian packaging for Gearsystem 3.4.1.
+  * Initial PPA build.
+  * Add Debian packaging for Gearsystem 3.9.9.
   * Build against libsdl3-dev from the https://launchpad.net/~johngrimmreaper  PPA.
   * Install the binary under /usr/games.
   * Add a desktop entry and application icon.
