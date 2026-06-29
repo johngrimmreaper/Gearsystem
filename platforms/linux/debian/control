@@ -16,6 +16,7 @@ Vcs-Git: https://github.com/drhelius/Gearsystem.git
 Package: gearsystem
 Architecture: amd64 amd64v3 i386 arm64 armhf
 Depends:
+ sdl-gamecontrollerdb,
  ${misc:Depends},
  ${shlibs:Depends}
 Description: Sega Master System / Game Gear / SG-1000 emulator
