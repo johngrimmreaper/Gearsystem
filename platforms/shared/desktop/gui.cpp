@@ -49,13 +49,15 @@ static bool error_window_active = false;
 static char error_message[4096] = "";
 static bool loading_rom_active = false;
 static char loading_rom_path[4096] = "";
+static char loading_symbol_path[4096] = "";
 
 
 static void main_window(void);
 static void show_status_message(void);
 static void show_error_window(void);
 static void show_loading_popup(void);
-static void finish_loading_rom(void);
+static bool finish_loading_rom(void);
+static void update_window_visibility_padding(void);
 static Cartridge::CartridgeTypes get_mapper(int index);
 static Cartridge::CartridgeZones get_zone(int index);
 static Cartridge::CartridgeSystem get_system(int index);
@@ -131,6 +133,7 @@ bool gui_init(void)
     emu_set_overscan(config_debug.debug ? 0 : config_video.overscan);
     emu_set_hide_left_bar(config_video.hide_left_bar);
     emu_video_no_sprite_limit(config_video.sprite_limit);
+    emu_set_disassembler_syntax(config_debug.dis_syntax);
     emu_disable_ym2413(config_audio.ym2413 == 1);
     emu_enable_phaser(config_emulator.light_phaser);
     emu_enable_phaser_crosshair(config_emulator.light_phaser_crosshair, config_emulator.light_phaser_crosshair_shape, config_emulator.light_phaser_crosshair_color);
@@ -140,6 +143,7 @@ bool gui_init(void)
     strncpy_fit(gui_savefiles_path, config_emulator.savefiles_path.c_str(), sizeof(gui_savefiles_path));
     strncpy_fit(gui_savestates_path, config_emulator.savestates_path.c_str(), sizeof(gui_savestates_path));
     strncpy_fit(gui_screenshots_path, config_emulator.screenshots_path.c_str(), sizeof(gui_screenshots_path));
+    strncpy_fit(gui_mcp_http_address, config_emulator.mcp_http_address.c_str(), sizeof(gui_mcp_http_address));
 
     gui_debug_init();
     gui_init_menus();
@@ -158,6 +162,8 @@ void gui_destroy(void)
 void gui_render(void)
 {
     ImGui::NewFrame();
+
+    update_window_visibility_padding();
 
     if (config_debug.debug)
         ImGui::DockSpaceOverViewport();
@@ -304,10 +310,10 @@ void gui_shortcut(gui_ShortCutEvent event)
     }
 }
 
-void gui_load_rom(const char* path)
+bool gui_load_rom(const char* path, const char* symbol_path)
 {
     if (loading_rom_active)
-        return;
+        return false;
 
     gui_debug_auto_save_settings();
     config_push_recent_media(path);
@@ -315,9 +321,47 @@ void gui_load_rom(const char* path)
 
     strncpy(loading_rom_path, path, sizeof(loading_rom_path) - 1);
     loading_rom_path[sizeof(loading_rom_path) - 1] = '\0';
+    if (IsValidPointer(symbol_path) && (strlen(symbol_path) > 0))
+    {
+        strncpy(loading_symbol_path, symbol_path, sizeof(loading_symbol_path) - 1);
+        loading_symbol_path[sizeof(loading_symbol_path) - 1] = '\0';
+    }
+    else
+        loading_symbol_path[0] = '\0';
     loading_rom_active = true;
 
     emu_load_media_async(path, gui_get_force_configuration());
+
+    return true;
+}
+
+bool gui_is_rom_loading(void)
+{
+    return loading_rom_active;
+}
+
+bool gui_finish_loading_rom(void)
+{
+    if (!loading_rom_active || emu_is_media_loading())
+        return false;
+
+    loading_rom_active = false;
+    gui_dialog_in_use = false;
+    bool success = emu_finish_media_loading();
+
+    if (success)
+        success = finish_loading_rom();
+    else
+    {
+        std::string message("Error loading ROM:\n");
+        message += loading_rom_path;
+        gui_set_error_message(message.c_str());
+
+        emu_get_core()->GetCartridge()->Reset();
+        gui_action_reset();
+    }
+
+    return success;
 }
 
 Cartridge::ForceConfiguration gui_get_force_configuration(void)
@@ -350,6 +394,24 @@ void gui_set_error_message(const char* message)
 void gui_set_style(void)
 {
     set_style();
+}
+
+static void update_window_visibility_padding(void)
+{
+    static bool initialized = false;
+    static ImVec2 previous_work_size(0.0f, 0.0f);
+
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    if (!viewport || viewport->WorkSize.x <= 0.0f || viewport->WorkSize.y <= 0.0f)
+        return;
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    bool viewport_shrank = initialized && ((viewport->WorkSize.x < previous_work_size.x) || (viewport->WorkSize.y < previous_work_size.y));
+
+    style.DisplayWindowPadding = viewport_shrank ? ImVec2(100.0f, 70.0f) : ImVec2(19.0f, 19.0f);
+
+    previous_work_size = viewport->WorkSize;
+    initialized = true;
 }
 
 static void main_window(void)
@@ -584,23 +646,7 @@ static void show_loading_popup(void)
 
     if (!emu_is_media_loading())
     {
-        loading_rom_active = false;
-        gui_dialog_in_use = false;
-        bool success = emu_finish_media_loading();
-
-        if (success)
-        {
-            finish_loading_rom();
-        }
-        else
-        {
-            std::string message("Error loading ROM:\n");
-            message += loading_rom_path;
-            gui_set_error_message(message.c_str());
-
-            emu_get_core()->GetCartridge()->Reset();
-            gui_action_reset();
-        }
+        gui_finish_loading_rom();
         return;
     }
 
@@ -642,17 +688,22 @@ static void show_loading_popup(void)
     ImGui::PopStyleVar(3);
 }
 
-static void finish_loading_rom(void)
+static bool finish_loading_rom(void)
 {
     gui_cheat_list.clear();
     emu_clear_cheats();
 
     gui_debug_reset();
 
-    std::string str(loading_rom_path);
-    str = str.substr(0, str.find_last_of("."));
-    if (!gui_debug_load_symbols_file((str + ".sym").c_str()))
-        gui_debug_load_symbols_file((str + ".noi").c_str());
+    if (loading_symbol_path[0] != '\0')
+        gui_debug_load_symbols_file(loading_symbol_path);
+    else
+    {
+        std::string str(loading_rom_path);
+        str = str.substr(0, str.find_last_of("."));
+        if (!gui_debug_load_symbols_file((str + ".sym").c_str()))
+            gui_debug_load_symbols_file((str + ".noi").c_str());
+    }
 
     gui_debug_auto_load_settings();
 
@@ -668,6 +719,8 @@ static void finish_loading_rom(void)
 
     if (!emu_is_empty())
         application_update_title_with_rom(emu_get_core()->GetCartridge()->GetFileName());
+
+    return true;
 }
 
 static void show_error_window(void)

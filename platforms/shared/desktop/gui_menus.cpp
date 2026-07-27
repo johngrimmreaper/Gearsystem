@@ -146,7 +146,7 @@ static void menu_gearsystem(void)
                     if (ImGui::MenuItem(config_emulator.recent_roms[i].c_str(), shortcut))
                     {
                         char rom_path[4096];
-                        strcpy(rom_path, config_emulator.recent_roms[i].c_str());
+                        strncpy_fit(rom_path, config_emulator.recent_roms[i].c_str(), sizeof(rom_path));
                         gui_load_rom(rom_path);
                     }
                 }
@@ -190,6 +190,24 @@ static void menu_gearsystem(void)
             ImGui::PushItemWidth(140.0f);
             ImGui::SliderFloat("Speed", &config_rewind.speed, 1.0f, 8.0f, "%.0fx");
             ImGui::PopItemWidth();
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Run-Ahead"))
+        {
+            ImGui::PushItemWidth(140.0f);
+            ImGui::Combo("##runahead", &config_emulator.runahead, "Disabled\0" "1 Frame\0" "2 Frames\0" "3 Frames\0\0");
+            ImGui::PopItemWidth();
+
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Reduces input lag by speculatively running extra frames each update.");
+                ImGui::Text("Every frame multiplies CPU cost, so use the lowest value that feels right.");
+                ImGui::Text("Ignored while fast-forwarding.");
+                ImGui::EndTooltip();
+            }
 
             ImGui::EndMenu();
         }
@@ -624,6 +642,13 @@ static void menu_emulator(void)
 
         ImGui::MenuItem("Start Paused", "", &config_emulator.start_paused);
         ImGui::MenuItem("Pause When Inactive", "", &config_emulator.pause_when_inactive);
+        if (ImGui::MenuItem("Allow Screen Saver", "", &config_emulator.allow_screensaver))
+        {
+            if (config_emulator.allow_screensaver)
+                SDL_EnableScreenSaver();
+            else
+                SDL_DisableScreenSaver();
+        }
 
         ImGui::Separator();
 
@@ -773,16 +798,40 @@ static void menu_video(void)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Vertical Sync", "", &config_video.sync))
+        if (ImGui::BeginMenu("Vertical Sync"))
         {
-            display_set_vsync(config_video.sync);
-
-            if (config_video.sync)
+            ImGui::PushItemWidth(240.0f);
+#if defined(_WIN32)
+            if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Fixed (60 Hz, 120 Hz, 240 Hz)\0Variable Refresh Rate (VRR)\0\0"))
+#else
+            if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Fixed (60 Hz, 120 Hz, 240 Hz)\0\0"))
+#endif
             {
-                config_audio.sync = true;
-                config_emulator.ffwd = false;
-                emu_audio_reset();
+                if (config_video.sync_mode != config_VideoSync_Disabled)
+                {
+                    config_audio.sync = true;
+                    config_emulator.ffwd = false;
+                    emu_audio_reset();
+                }
+
+                display_use_vsync_if_enabled();
             }
+            ImGui::PopItemWidth();
+
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                ImGui::Text("Disabled: do not synchronize presentation to the monitor.");
+                ImGui::Text("Fixed: use normal VSync for 60 Hz, 120 Hz, and 240 Hz displays.");
+#if defined(_WIN32)
+                ImGui::Text("VRR: present at the emulator frame rate.");
+                ImGui::Text("VRR requires fullscreen, a VRR display, and G-SYNC,");
+                ImGui::Text("FreeSync, or Adaptive Sync enabled in your monitor and GPU driver settings.");
+#endif
+                ImGui::EndTooltip();
+            }
+
+            ImGui::EndMenu();
         }
 
         ImGui::MenuItem("Show FPS", "", &config_video.fps);
@@ -1322,8 +1371,8 @@ static void menu_audio(void)
 
         //     if (!config_audio.sync)
         //     {
-        //         config_video.sync = false;
-        //         display_set_vsync(false);
+        //         config_video.sync_mode = config_VideoSync_Disabled;
+        //         display_disable_vsync();
         //     }
         // }
 
@@ -1499,7 +1548,10 @@ static void menu_debug(void)
 
             if (ImGui::MenuItem("Start HTTP Server", "", false, !mcp_running))
             {
-                emu_mcp_set_transport(1, config_emulator.mcp_tcp_port);
+                if (strlen(gui_mcp_http_address) == 0)
+                    strncpy_fit(gui_mcp_http_address, "127.0.0.1", sizeof(gui_mcp_http_address));
+                config_emulator.mcp_http_address = gui_mcp_http_address;
+                emu_mcp_set_transport(1, config_emulator.mcp_tcp_port, config_emulator.mcp_http_address.c_str());
                 emu_mcp_start();
             }
 
@@ -1513,11 +1565,17 @@ static void menu_debug(void)
             if (stdio_running)
                 ImGui::TextColored(ImVec4(0.90f, 0.70f, 0.10f, 1.0f), "STDIO mode active");
             else if (http_running)
-                ImGui::TextColored(ImVec4(0.10f, 0.90f, 0.10f, 1.0f), "Listening on %d", config_emulator.mcp_tcp_port);
+                ImGui::TextColored(ImVec4(0.10f, 0.90f, 0.10f, 1.0f), "Listening on %s:%d", config_emulator.mcp_http_address.c_str(), config_emulator.mcp_tcp_port);
             else
                 ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f), "Stopped");
 
             ImGui::Separator();
+
+            ImGui::Text("HTTP Address:");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(120);
+            if (ImGui::InputText("##mcp_address", gui_mcp_http_address, IM_ARRAYSIZE(gui_mcp_http_address), ImGuiInputTextFlags_AutoSelectAll))
+                config_emulator.mcp_http_address = gui_mcp_http_address;
 
             ImGui::Text("HTTP Port:");
             ImGui::SameLine();
@@ -1634,7 +1692,7 @@ static void draw_mcp_status(void)
     if (!emu_mcp_is_running())
         return;
 
-    char status[64];
+    char status[128];
     ImVec4 color(0.10f, 0.90f, 0.10f, 1.0f);
 
     int transport_mode = emu_mcp_get_transport_mode();
@@ -1645,7 +1703,7 @@ static void draw_mcp_status(void)
     }
     else if (transport_mode == 1)
     {
-        snprintf(status, sizeof(status), "MCP: HTTP (%d)", config_emulator.mcp_tcp_port);
+        snprintf(status, sizeof(status), "MCP: HTTP (%s:%d)", config_emulator.mcp_http_address.c_str(), config_emulator.mcp_tcp_port);
     }
     else
     {

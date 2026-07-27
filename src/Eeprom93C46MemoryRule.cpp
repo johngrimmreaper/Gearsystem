@@ -159,10 +159,13 @@ void Eeprom93C46MemoryRule::PerformWrite(u16 address, u8 value)
 
 void Eeprom93C46MemoryRule::Reset()
 {
+    int bankCount = m_pCartridge->GetROMBankCount();
+    int mask = (bankCount > 0) ? (bankCount - 1) : 0;
+
     for (int i = 0; i < 3; i++)
     {
-        m_iMapperSlot[i] = i;
-        m_iMapperSlotAddress[i] = i * 0x4000;
+        m_iMapperSlot[i] = i & mask;
+        m_iMapperSlotAddress[i] = m_iMapperSlot[i] * 0x4000;
     }
 
     EEPROM_93c46_Clear();
@@ -260,7 +263,7 @@ void Eeprom93C46MemoryRule::SaveState(std::ostream& stream)
     stream.write(reinterpret_cast<const char*>(&m_EEPROM), sizeof(m_EEPROM));
 }
 
-void Eeprom93C46MemoryRule::LoadState(std::istream& stream)
+void Eeprom93C46MemoryRule::LoadState(std::istream& stream, int)
 {
     using namespace std;
 

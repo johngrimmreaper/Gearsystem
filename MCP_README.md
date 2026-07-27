@@ -18,29 +18,29 @@ This server provides tools for game development, rom hacking, reverse engineerin
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.9/Gearsystem-3.9.9-mcpb-windows-x64.mcpb">Gearsystem-3.9.9-mcpb-windows-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.14/Gearsystem-3.9.14-mcpb-windows-x64.mcpb">Gearsystem-3.9.14-mcpb-windows-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.9/Gearsystem-3.9.9-mcpb-windows-arm64.mcpb">Gearsystem-3.9.9-mcpb-windows-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.14/Gearsystem-3.9.14-mcpb-windows-arm64.mcpb">Gearsystem-3.9.14-mcpb-windows-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>macOS</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.9/Gearsystem-3.9.9-mcpb-macos-x64.mcpb">Gearsystem-3.9.9-mcpb-macos-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.14/Gearsystem-3.9.14-mcpb-macos-x64.mcpb">Gearsystem-3.9.14-mcpb-macos-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.9/Gearsystem-3.9.9-mcpb-macos-arm64.mcpb">Gearsystem-3.9.9-mcpb-macos-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.14/Gearsystem-3.9.14-mcpb-macos-arm64.mcpb">Gearsystem-3.9.14-mcpb-macos-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>Linux</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.9/Gearsystem-3.9.9-mcpb-linux-x64.mcpb">Gearsystem-3.9.9-mcpb-linux-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.14/Gearsystem-3.9.14-mcpb-linux-x64.mcpb">Gearsystem-3.9.14-mcpb-linux-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.9/Gearsystem-3.9.9-mcpb-linux-arm64.mcpb">Gearsystem-3.9.9-mcpb-linux-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.14/Gearsystem-3.9.14-mcpb-linux-arm64.mcpb">Gearsystem-3.9.14-mcpb-linux-arm64.mcpb</a></td>
     </tr>
   </tbody>
 </table>
@@ -52,7 +52,8 @@ This server provides tools for game development, rom hacking, reverse engineerin
 - **Disassembly**: View disassembled Z80 code around PC or any address
 - **Hardware Inspection**: Z80 CPU, VDP, PSG, YM2413 FM synthesis
 - **Sprite Viewer**: List and inspect all 64 sprites with images
-- **Symbol Support**: Add, remove, and list debug symbols
+- **Symbol Support**: Add, remove, list, and look up debug symbols
+- **Input State**: Inspect effective pressed buttons and pending tap releases
 - **Bookmarks**: Memory and disassembler bookmarks for navigation
 - **Call Stack**: View function call hierarchy
 - **Trace Logger**: CPU instruction trace with interleaved hardware events (VDP, PSG, YM2413, I/O, bank switching)
@@ -70,11 +71,38 @@ The default mode uses standard input/output for communication. The emulator is l
 
 ### HTTP Transport
 
-The HTTP transport mode runs the emulator with an embedded web server on `localhost:7777/mcp`. The emulator stays running independently while the AI client connects via HTTP.
+The HTTP transport mode runs the emulator with an embedded web server on `127.0.0.1:7777/mcp` by default. The emulator stays running independently while the AI client connects via HTTP. Each request's `Host` and browser `Origin` must match the address on which its connection reached the server. Loopback mode can run without authentication; wildcard and other non-loopback bind addresses require `GEARSYSTEM_MCP_HTTP_TOKEN`, and the server refuses to start without it.
 
 ### Headless Mode
 
 Add `--headless` to run without a GUI window. This is useful for servers, CLI agents, or any machine without a display. All MCP tools work identically in headless mode. Requires `--mcp-stdio` or `--mcp-http`.
+
+## MCP Tool Router
+
+By default, Gearsystem exposes every MCP tool directly. This avoids nested tool discovery in clients that already defer MCP schemas, including Claude Code.
+
+Add `--mcp-router` to expose a compact set of high-frequency tools directly and route advanced debugger tools through lightweight discovery tools. This reduces MCP context while preserving access to the full debugger surface.
+
+Direct tools in routed mode: `load_media`, `get_media_info`, `debug_pause`, `debug_continue`, `debug_step_into`, `get_z80_status`, `read_memory`, `write_memory`, `get_disassembly`, `set_breakpoint`, `get_screenshot`, and `controller_button`.
+
+Router tools:
+
+- `list_tool_categories` lists routed tool categories with descriptions and tool counts.
+- `get_category_tools` lists routed tools in a category with compact descriptions.
+- `search_tools` searches direct and routed tools and returns compact category/tool/description matches.
+- `get_tool_info` returns one tool's real input schema and metadata.
+- `execute_tool` executes a routed tool by name. First use `search_tools` or `get_category_tools` to discover the tool, then call `get_tool_info` to obtain its exact input schema.
+
+Example routed call:
+
+```json
+{
+  "name": "get_vdp_status",
+  "arguments": {}
+}
+```
+
+Without `--mcp-router`, call every MCP tool directly.
 
 ## Quick Start
 
@@ -173,50 +201,95 @@ If you prefer to build from source or configure manually:
 ### HTTP Mode
 
 1. **Start the emulator manually** with HTTP transport:
+
    ```bash
    ./gearsystem --mcp-http
-   # Server will start on http://localhost:7777/mcp
+  ```
 
-   # Or specify a custom port:
+  The default endpoint is `http://127.0.0.1:7777/mcp`.
+
+  To use a custom port:
+
+  ```bash
    ./gearsystem --mcp-http --mcp-http-port 3000
-   # Server will start on http://localhost:3000/mcp
+  ```
+
+  To bind to a custom address, set a bearer token first:
+
+  ```bash
+  GEARSYSTEM_MCP_HTTP_TOKEN="change-this-token" ./gearsystem --mcp-http --mcp-http-address 0.0.0.0 --mcp-http-port 3000
+  ```
+
+  Clients must connect using the server's actual interface address, such as `http://192.168.1.50:3000/mcp`, not `0.0.0.0` or a spoofed loopback address.
+
+  You can also start the server using the "MCP" menu in the GUI.
+
+2. **Configure bearer-token authentication**:
+
+  Set `GEARSYSTEM_MCP_HTTP_TOKEN` before starting HTTP mode. Authentication is optional for loopback binds and required for wildcard or other non-loopback binds.
+
+  macOS and Linux:
+
+  ```bash
+  GEARSYSTEM_MCP_HTTP_TOKEN="change-this-token" ./gearsystem --mcp-http
+  ```
+
+  Windows PowerShell:
+
+  ```powershell
+  $env:GEARSYSTEM_MCP_HTTP_TOKEN = "change-this-token"
+  .\gearsystem.exe --mcp-http
+  ```
+
+  Windows Command Prompt:
+
+  ```cmd
+  set GEARSYSTEM_MCP_HTTP_TOKEN=change-this-token
+  gearsystem.exe --mcp-http
    ```
 
-   You can optionally start the server using the "MCP" menu in the GUI.
+3. **Configure VS Code** `.vscode/mcp.json`:
 
-2. **Configure VS Code** `.vscode/mcp.json`:
    ```json
    {
      "servers": {
        "gearsystem": {
          "type": "http",
-         "url": "http://localhost:7777/mcp",
-         "headers": {}
+         "url": "http://127.0.0.1:7777/mcp",
+         "headers": {
+           "Authorization": "Bearer change-this-token"
+         }
        }
      }
    }
    ```
 
-3. **Or configure Claude Desktop**:
+4. **Or configure Claude Desktop**:
+
    ```json
    {
      "mcpServers": {
        "gearsystem": {
          "type": "http",
-         "url": "http://localhost:7777/mcp"
+         "url": "http://127.0.0.1:7777/mcp",
+         "headers": {
+           "Authorization": "Bearer change-this-token"
+         }
        }
      }
    }
    ```
 
-4. **Or configure Claude Code**:
+5. **Or configure Claude Code**:
+
    ```bash
-   claude mcp add --transport http gearsystem http://localhost:7777/mcp
+  claude mcp add --transport http gearsystem http://127.0.0.1:7777/mcp
    ```
 
-5. **Restart your AI client** and start debugging
+6. **Restart your AI client** and start debugging
 
 > **Note:** The MCP HTTP Server must be running standalone before connecting the AI client.
+> **Security:** Without `GEARSYSTEM_MCP_HTTP_TOKEN`, HTTP mode starts only on a loopback address. Wildcard and other non-loopback binds are refused. `Host` and browser `Origin` values are matched to the connection's actual destination address to prevent DNS rebinding and address spoofing.
 
 ## Usage Examples
 
@@ -237,16 +310,14 @@ Once configured, you can ask your AI assistant:
 ### Advanced Debugging Workflows
 
 - "Find the VBlank interrupt handler, analyze what it does, and add symbols for all the subroutines it calls"
-
 - "Locate the sprite update routine. Study how this game manages its sprite system, explain the algorithm, and add bookmarks to key sections. Also add watches for any sprite-related variables you find"
-
 - "There's a data decompression routine around address 0x8000. Step through it instruction by instruction, reverse engineer the compression algorithm, and explain how it works with examples"
-
 - "Find where the game stores its level data in ROM. Analyze the data structure format, create a memory map showing each section, and add symbols for the data tables"
-
 - "The game is rendering corrupted graphics. Examine the VDP registers, check the VRAM contents, inspect the sprite attribute table, and diagnose what's causing the corruption. Set up watches on relevant memory addresses"
 
 ## Available MCP Tools
+
+This is the full tool catalog. All tools are exposed directly by default. With `--mcp-router`, discover advanced tools through `search_tools` or `get_category_tools`, inspect their schemas with `get_tool_info`, then invoke them with `execute_tool`.
 
 The server exposes tools organized in the following categories:
 
@@ -256,7 +327,7 @@ The server exposes tools organized in the following categories:
 - `debug_step_into` - Step one Z80 instruction
 - `debug_step_over` - Step over subroutine calls
 - `debug_step_out` - Step out of current subroutine
-- `debug_step_frame` - Step one frame
+- `debug_step_frame` - Step one or more frames
 - `debug_run_to_cursor` - Continue execution until reaching specified address
 - `debug_reset` - Reset emulation
 - `debug_get_status` - Get debug status (paused, at_breakpoint, pc address)
@@ -280,17 +351,21 @@ The server exposes tools organized in the following categories:
 - `list_memory_watches` - List all watches in memory area
 - `memory_search_capture` - Capture memory snapshot for search comparison
 - `memory_search` - Search memory with operators (<, >, ==, !=, <=, >=), compare types (previous, value, address), and data types (hex, signed, unsigned)
+- `memory_find_bytes` - Find byte sequences in memory
 
 ### Disassembly & Debugging
 - `get_disassembly` - Get Z80 disassembly for specified address range
 - `add_symbol` - Add symbol (label) at specified address
 - `remove_symbol` - Remove symbol
 - `list_symbols` - List all defined symbols
+- `lookup_symbol_by_name` - Find all exact-name symbol matches
+- `lookup_symbol_at_address` - Find symbol at bank/address
 - `add_disassembler_bookmark` - Add bookmark in disassembler
 - `remove_disassembler_bookmark` - Remove disassembler bookmark
 - `list_disassembler_bookmarks` - List all disassembler bookmarks
 - `get_call_stack` - View function call hierarchy
 - `get_trace_log` - Read trace logger entries (CPU + hardware events). Start the trace logger from the debugger window first
+- `set_trace_log` - Start or stop trace logging with event filters
 
 ### Breakpoints
 - `set_breakpoint` - Set execution, read, or write breakpoint (supports 4 memory areas: rom_ram, vram, cram, vdp_reg)
@@ -321,6 +396,8 @@ The server exposes tools organized in the following categories:
 - `select_save_state_slot` - Select active save state slot (1-5) for save/load operations
 - `save_state` - Save emulator state to currently selected slot
 - `load_state` - Load emulator state from currently selected slot
+- `save_state_file` - Save emulator state to an explicit file path
+- `load_state_file` - Load emulator state from an explicit file path
 - `set_fast_forward_speed` - Set fast forward speed multiplier (0: 1.5x, 1: 2x, 2: 2.5x, 3: 3x, 4: Unlimited)
 - `toggle_fast_forward` - Toggle fast forward mode on/off
 - `get_rewind_status` - Get rewind buffer status (enabled, snapshots, capacity, buffered seconds)
@@ -328,6 +405,8 @@ The server exposes tools organized in the following categories:
 
 ### Controller Input
 - `controller_button` - Control a button on a controller (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, 1, 2, start
+- `controller_macro` - Run an ordered input macro. Top-level `player` defaults to 1, and each command may override it. Supported commands are `tap`, `press`, `release`, and `wait`; timing is explicit through `wait` frame counts
+- `get_input_state` - Get effective pressed buttons and pending tap releases
 
 ## How MCP Works in Gearsystem
 

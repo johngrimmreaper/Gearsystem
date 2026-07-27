@@ -32,7 +32,7 @@
     #define EXTERN extern
 #endif
 
-static const int config_version = 2;
+static const int config_version = 4;
 static const int config_max_recent_roms = 10;
 static const int config_memory_editor_count = 18;
 
@@ -49,6 +49,13 @@ enum config_Theme
     config_Theme_Count = 2
 };
 
+enum config_VideoSync
+{
+    config_VideoSync_Disabled = 0,
+    config_VideoSync_Fixed = 1,
+    config_VideoSync_VRR = 2
+};
+
 struct config_Emulator
 {
     bool maximized = false;
@@ -62,6 +69,7 @@ struct config_Emulator
     bool pause_when_inactive = true;
     bool ffwd = false;
     int ffwd_speed = 1;
+    int runahead = 0;
     int system = 0;
     int zone = 0;
     int mapper = 0;
@@ -83,6 +91,7 @@ struct config_Emulator
     int window_width = 770;
     int window_height = 600;
     bool status_messages = false;
+    bool allow_screensaver = false;
     bool light_phaser = false;
     bool light_phaser_crosshair = false;
     int light_phaser_crosshair_shape = 0;
@@ -93,6 +102,7 @@ struct config_Emulator
     int paddle_sensitivity = 5;
     bool capture_mouse = false;
     int mcp_tcp_port = 7777;
+    std::string mcp_http_address = "127.0.0.1";
 };
 
 struct config_Video
@@ -103,7 +113,7 @@ struct config_Video
     int overscan = 1;
     int hide_left_bar = 0;
     bool fps = false;
-    bool sync = true;
+    int sync_mode = config_VideoSync_Disabled;
     bool sprite_limit = false;
     float background_color[config_Theme_Count][3] = {
         {128.0f / 255.0f, 128.0f / 255.0f, 128.0f / 255.0f},
@@ -247,6 +257,7 @@ struct config_Debug
     bool dis_dim_auto_symbols = false;
     bool dis_replace_symbols = true;
     bool dis_replace_labels = true;
+    int dis_syntax = GS_Disassembler_Syntax_Gearsystem;
     int dis_look_ahead_count = 20;
     int font_size = 0;
     int scale = 2;
@@ -263,7 +274,6 @@ struct config_Debug
 EXTERN mINI::INIFile* config_ini_file;
 EXTERN mINI::INIStructure config_ini_data;
 EXTERN const char* config_root_path;
-EXTERN char config_temp_path[512];
 EXTERN char config_emu_file_path[512];
 EXTERN char config_imgui_file_path[512];
 EXTERN config_Emulator config_emulator;

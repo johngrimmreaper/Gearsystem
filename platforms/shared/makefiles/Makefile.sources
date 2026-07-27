@@ -27,6 +27,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/gui_popups.cpp \
     $(DESKTOP_SRC_DIR)/gui_actions.cpp \
     $(DESKTOP_SRC_DIR)/rewind.cpp \
+    $(DESKTOP_SRC_DIR)/runahead.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_disassembler.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_memeditor.cpp \
@@ -48,6 +49,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_debug_adapter.cpp \
+    $(DESKTOP_SRC_DIR)/mcp/mcp_tool_registry.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_server.cpp \
     $(SRC_DIR)/Audio.cpp \
     $(SRC_DIR)/Cartridge.cpp \

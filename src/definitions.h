@@ -142,7 +142,7 @@ typedef void (*RamChangedCallback) (void);
 #define GS_AUDIO_QUEUE_SIZE 1792
 
 #define GS_SAVESTATE_MAGIC 0x03121220
-#define GS_SAVESTATE_VERSION 103
+#define GS_SAVESTATE_VERSION 105
 #define GS_SAVESTATE_MIN_VERSION 100
 #define GS_SAVESTATE_VERSION_V1 1
 
@@ -195,6 +195,15 @@ struct GS_RuntimeInfo
     GS_Region region;
 };
 
+enum GS_Disassembler_Syntax
+{
+    GS_Disassembler_Syntax_Gearsystem = 0,
+    GS_Disassembler_Syntax_WLADX,
+    GS_Disassembler_Syntax_TNIASM,
+    GS_Disassembler_Syntax_Z88DK,
+    GS_Disassembler_Syntax_Count
+};
+
 struct GS_SaveState_Header
 {
     u32 magic;
@@ -239,6 +248,9 @@ struct GS_Disassembler_Record
     int irq;
     bool has_operand_address;
     u16 operand_address;
+    bool operand_is_zp;
+    int operand_offset;
+    int operand_length;
     char auto_symbol[64];
 };
 

@@ -33,9 +33,10 @@ public:
     virtual u8* GetPage(int index);
     virtual int GetBank(int index);
     virtual void SaveState(std::ostream& stream);
-    virtual void LoadState(std::istream& stream);
+    virtual void LoadState(std::istream& stream, int version);
 
 private:
+    int m_iROMBankMask;
     int m_iMapperSlot2;
     int m_iMapperSlot2Address;
 };

@@ -157,11 +157,13 @@ void SegaMemoryRule::Reset()
     m_RAMBankStartAddress = 0;
     m_bRAMEnabled = false;
     m_iPersistRAM = -1;
+    int bankCount = m_pCartridge->GetROMBankCount();
+    int mask = (bankCount > 0) ? (bankCount - 1) : 0;
 
     for (int i = 0; i < 3; i++)
     {
-        m_iMapperSlot[i] = i;
-        m_iMapperSlotAddress[i] = i * 0x4000;
+        m_iMapperSlot[i] = i & mask;
+        m_iMapperSlotAddress[i] = m_iMapperSlot[i] * 0x4000;
     }
 }
 
@@ -266,7 +268,7 @@ void SegaMemoryRule::SaveState(std::ostream& stream)
     stream.write(reinterpret_cast<const char*> (&m_iPersistRAM), sizeof(m_iPersistRAM));
 }
 
-void SegaMemoryRule::LoadState(std::istream& stream)
+void SegaMemoryRule::LoadState(std::istream& stream, int)
 {
     using namespace std;
 

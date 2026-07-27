@@ -19,6 +19,7 @@
 
 #include <SDL3/SDL.h>
 #include <iomanip>
+#include <string>
 #include "gearsystem.h"
 
 #define MINI_CASE_SENSITIVE
@@ -29,7 +30,8 @@
 #include "shader_preset.h"
 #include "utils.h"
 
-static bool check_portable(void);
+static char* get_portable_path(void);
+static bool check_portable(const char* base_path);
 static int read_int(const char* group, const char* key, int default_value);
 static void write_int(const char* group, const char* key, int integer);
 static float read_float(const char* group, const char* key, float default_value);
@@ -132,9 +134,10 @@ static void set_defaults(void)
 void config_init(void)
 {
     const char* root_path = NULL;
+    char* portable_path = get_portable_path();
 
-    if (check_portable())
-        root_path = SDL_strdup(SDL_GetBasePath());
+    if (portable_path)
+        root_path = portable_path;
     else
         root_path = SDL_GetPrefPath("Geardome", GS_TITLE);
 
@@ -145,10 +148,6 @@ void config_init(void)
     }
 
     config_root_path = root_path;
-
-    strncpy_fit(config_temp_path, config_root_path, sizeof(config_temp_path));
-    strncat_fit(config_temp_path, "tmp/", sizeof(config_temp_path));
-    create_directory_if_not_exists(config_temp_path);
 
     strncpy_fit(config_emu_file_path, config_root_path, sizeof(config_emu_file_path));
     strncat_fit(config_emu_file_path, "config.ini", sizeof(config_emu_file_path));
@@ -208,12 +207,15 @@ void config_read(void)
 
     int file_version = read_int("General", "Version", 0);
 
-    if (file_version < config_version)
+    if (file_version < 2)
     {
         Log("Settings version %d is outdated (current: %d). Using defaults.", file_version, config_version);
         config_write();
         return;
     }
+
+    if (file_version < config_version)
+        Log("Migrating settings version %d to %d", file_version, config_version);
 
     Log("Loading settings from %s (version %d)", config_emu_file_path, file_version);
 
@@ -260,6 +262,8 @@ void config_read(void)
     config_debug.dis_dim_auto_symbols = read_bool("Debug", "DisDimAutoSymbols", false);
     config_debug.dis_replace_symbols = read_bool("Debug", "DisReplaceSymbols", true);
     config_debug.dis_replace_labels = read_bool("Debug", "DisReplaceLabels", true);
+    config_debug.dis_syntax = read_int("Debug", "DisSyntax", GS_Disassembler_Syntax_Gearsystem);
+    config_debug.dis_syntax = CLAMP(config_debug.dis_syntax, GS_Disassembler_Syntax_Gearsystem, GS_Disassembler_Syntax_Count - 1);
     config_debug.dis_look_ahead_count = read_int("Debug", "DisLookAheadCount", 20);
     config_debug.font_size = read_int("Debug", "FontSize", 0);
     config_debug.scale = read_int("Debug", "Scale", 2);
@@ -284,7 +288,10 @@ void config_read(void)
     config_emulator.theme = read_int("Emulator", "Theme", config_Theme_Dark);
     config_emulator.theme = CLAMP(config_emulator.theme, config_Theme_Light, config_Theme_Dark);
     config_emulator.ffwd_speed = read_int("Emulator", "FFWD", 1);
+    config_emulator.runahead = read_int("Emulator", "RunAhead", 0);
+    config_emulator.runahead = CLAMP(config_emulator.runahead, 0, 3);
     config_emulator.save_slot = read_int("Emulator", "SaveSlot", 0);
+    config_emulator.save_slot = CLAMP(config_emulator.save_slot, 0, 4);
     config_emulator.start_paused = read_bool("Emulator", "StartPaused", false);
     config_emulator.pause_when_inactive = read_bool("Emulator", "PauseWhenInactive", true);
     config_emulator.system = read_int("Emulator", "System", 0);
@@ -306,7 +313,11 @@ void config_read(void)
     config_emulator.window_width = read_int("Emulator", "WindowWidth", 770);
     config_emulator.window_height = read_int("Emulator", "WindowHeight", 600);
     config_emulator.status_messages = read_bool("Emulator", "StatusMessages", false);
+    config_emulator.allow_screensaver = read_bool("Emulator", "AllowScreenSaver", false);
     config_emulator.mcp_tcp_port = read_int("Emulator", "MCPTCPPort", 7777);
+    config_emulator.mcp_http_address = read_string("Emulator", "MCPHTTPAddress");
+    if (config_emulator.mcp_http_address.empty())
+        config_emulator.mcp_http_address = "127.0.0.1";
     config_emulator.light_phaser = read_bool("Emulator", "LightPhaser", false);
     config_emulator.light_phaser_crosshair = read_bool("Emulator", "LightPhaserCrosshair", false);
     config_emulator.light_phaser_crosshair_shape = read_int("Emulator", "LightPhaserCrosshairShape", 0);
@@ -349,7 +360,19 @@ void config_read(void)
     config_video.shader_mode = read_int("Video", "ShaderMode", config_ShaderMode_PixelPerfect);
     config_video.shader_mode = CLAMP(config_video.shader_mode, config_ShaderMode_PixelPerfect, config_ShaderMode_External);
     config_video.shader_preset_path = read_string("Video", "ShaderPresetFile");
-    config_video.sync = read_bool("Video", "Sync", true);
+    config_video.sync_mode = read_int("Video", "SyncMode", -1);
+    if ((file_version < config_version) || (config_video.sync_mode < config_VideoSync_Disabled) || (config_video.sync_mode > config_VideoSync_VRR))
+    {
+        bool sync = read_bool("Video", "Sync", true);
+        bool vrr = read_bool("Video", "VRR", false);
+        config_video.sync_mode = sync ? (vrr ? config_VideoSync_VRR : config_VideoSync_Fixed) : config_VideoSync_Disabled;
+    }
+    else
+        config_video.sync_mode = CLAMP(config_video.sync_mode, config_VideoSync_Disabled, config_VideoSync_VRR);
+#if !defined(_WIN32)
+    if (config_video.sync_mode == config_VideoSync_VRR)
+    config_video.sync_mode = config_VideoSync_Fixed;
+#endif
     config_video.sprite_limit = read_bool("Video", "SpriteLimit", false);
     config_video.background_color[config_Theme_Dark][0] = read_float("Video", "BackgroundColorR", 0.1f);
     config_video.background_color[config_Theme_Dark][1] = read_float("Video", "BackgroundColorG", 0.1f);
@@ -516,6 +539,7 @@ void config_write(void)
     write_bool("Debug", "DisDimAutoSymbols", config_debug.dis_dim_auto_symbols);
     write_bool("Debug", "DisReplaceSymbols", config_debug.dis_replace_symbols);
     write_bool("Debug", "DisReplaceLabels", config_debug.dis_replace_labels);
+    write_int("Debug", "DisSyntax", config_debug.dis_syntax);
     write_int("Debug", "DisLookAheadCount", config_debug.dis_look_ahead_count);
     write_int("Debug", "FontSize", config_debug.font_size);
     write_int("Debug", "Scale", config_debug.scale);
@@ -539,6 +563,7 @@ void config_write(void)
     write_bool("Emulator", "AlwaysShowMenu", config_emulator.always_show_menu);
     write_int("Emulator", "Theme", config_emulator.theme);
     write_int("Emulator", "FFWD", config_emulator.ffwd_speed);
+    write_int("Emulator", "RunAhead", config_emulator.runahead);
     write_int("Emulator", "SaveSlot", config_emulator.save_slot);
     write_bool("Emulator", "StartPaused", config_emulator.start_paused);
     write_bool("Emulator", "PauseWhenInactive", config_emulator.pause_when_inactive);
@@ -561,7 +586,9 @@ void config_write(void)
     write_int("Emulator", "WindowWidth", config_emulator.window_width);
     write_int("Emulator", "WindowHeight", config_emulator.window_height);
     write_bool("Emulator", "StatusMessages", config_emulator.status_messages);
+    write_bool("Emulator", "AllowScreenSaver", config_emulator.allow_screensaver);
     write_int("Emulator", "MCPTCPPort", config_emulator.mcp_tcp_port);
+    write_string("Emulator", "MCPHTTPAddress", config_emulator.mcp_http_address);
     write_bool("Emulator", "LightPhaser", config_emulator.light_phaser);
     write_bool("Emulator", "LightPhaserCrosshair", config_emulator.light_phaser_crosshair);
     write_int("Emulator", "LightPhaserCrosshairShape", config_emulator.light_phaser_crosshair_shape);
@@ -586,7 +613,7 @@ void config_write(void)
     write_int("Video", "ShaderMode", config_video.shader_mode);
     write_string("Video", "ShaderPresetFile", get_filename(config_video.shader_preset_path.c_str()));
     sync_shader_preset_parameter_defaults();
-    write_bool("Video", "Sync", config_video.sync);
+    write_int("Video", "SyncMode", config_video.sync_mode);
     write_bool("Video", "SpriteLimit", config_video.sprite_limit);
     write_float("Video", "BackgroundColorR", config_video.background_color[config_Theme_Dark][0]);
     write_float("Video", "BackgroundColorG", config_video.background_color[config_Theme_Dark][1]);
@@ -709,16 +736,46 @@ void config_write(void)
     }
 }
 
-static bool check_portable(void)
+static char* get_portable_path(void)
 {
-    const char* base_path;
-    char portable_file_path[260];
-    
-    base_path = SDL_GetBasePath();
+    const char* base_path = SDL_GetBasePath();
+    if (base_path == NULL)
+        return NULL;
+
+#if defined(__APPLE__)
+    std::string app_path = base_path;
+    const std::string app_contents = ".app/Contents/";
+    size_t app_contents_pos = app_path.rfind(app_contents);
+
+    if (app_contents_pos != std::string::npos)
+    {
+        size_t app_dir_pos = app_path.rfind('/', app_contents_pos);
+
+        if (app_dir_pos != std::string::npos)
+        {
+            std::string portable_path = app_path.substr(0, app_dir_pos + 1);
+
+            if (check_portable(portable_path.c_str()))
+                return SDL_strdup(portable_path.c_str());
+        }
+    }
+#endif
+
+    if (check_portable(base_path))
+        return SDL_strdup(base_path);
+
+    return NULL;
+}
+
+static bool check_portable(const char* base_path)
+{
+    char portable_file_path[512];
+
     if (base_path == NULL)
         return false;
-    
-    snprintf(portable_file_path, sizeof(portable_file_path), "%sportable.ini", base_path);
+
+    if (snprintf(portable_file_path, sizeof(portable_file_path), "%sportable.ini", base_path) >= (int)sizeof(portable_file_path))
+        return false;
 
     FILE* file = fopen_utf8(portable_file_path, "r");
     

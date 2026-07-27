@@ -66,31 +66,40 @@ void gui_popup_modal_gamepad(int pad)
 {
     if (ImGui::BeginPopupModal("Gamepad Configuration", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("Press any button in your gamepad...\n\n");
+        SDL_Gamepad* controller = gamepad_controller[pad];
+
+        if (IsValidPointer(controller))
+            ImGui::Text("Press any button in your gamepad...\n\n");
+        else
+            ImGui::Text("No gamepad detected.\n\n");
+
         ImGui::Separator();
 
-        for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++)
+        if (IsValidPointer(controller))
         {
-            if (SDL_GetGamepadButton(gamepad_controller[pad], (SDL_GamepadButton)i))
+            for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; i++)
             {
-                *gui_configured_button = i;
-                ImGui::CloseCurrentPopup();
-                break;
+                if (SDL_GetGamepadButton(controller, (SDL_GamepadButton)i))
+                {
+                    *gui_configured_button = i;
+                    ImGui::CloseCurrentPopup();
+                    break;
+                }
             }
-        }
 
-        for (int a = SDL_GAMEPAD_AXIS_LEFTX; a < SDL_GAMEPAD_AXIS_COUNT; a++)
-        {
-            if (a != SDL_GAMEPAD_AXIS_LEFT_TRIGGER && a != SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)
-                continue;
-
-            Sint16 value = SDL_GetGamepadAxis(gamepad_controller[pad], (SDL_GamepadAxis)a);
-
-            if (value > GAMEPAD_VBTN_AXIS_THRESHOLD)
+            for (int a = SDL_GAMEPAD_AXIS_LEFTX; a < SDL_GAMEPAD_AXIS_COUNT; a++)
             {
-                *gui_configured_button = GAMEPAD_VBTN_AXIS_BASE + a;
-                ImGui::CloseCurrentPopup();
-                break;
+                if (a != SDL_GAMEPAD_AXIS_LEFT_TRIGGER && a != SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)
+                    continue;
+
+                Sint16 value = SDL_GetGamepadAxis(controller, (SDL_GamepadAxis)a);
+
+                if (value > GAMEPAD_VBTN_AXIS_THRESHOLD)
+                {
+                    *gui_configured_button = GAMEPAD_VBTN_AXIS_BASE + a;
+                    ImGui::CloseCurrentPopup();
+                    break;
+                }
             }
         }
 
@@ -331,10 +340,8 @@ void gui_show_info(void)
     emu_get_info(info, 512);
 
     ImGui::PushFont(gui_default_font);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f,0.502f,0.957f,1.0f));
     ImGui::SetCursorPosX(5.0f);
     ImGui::Text("%s", info);
-    ImGui::PopStyleColor();
     ImGui::PopFont();
 
     ImGui::End();
