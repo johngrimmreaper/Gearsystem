@@ -1,8 +1,16 @@
+gearsystem (3.9.14-1~ppa1) UNRELEASED; urgency=medium
+
+  * New upstream release 3.9.14.
+  * Build against libsdl3-dev 3.4.10+ds-1.
+  * Install MIME definitions for Sega Master System, Game Gear,
+    and SG-1000 ROM files.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 27 Jul 2026 16:42:10 +0000
+
 gearsystem (3.9.9-1~ppa1) UNRELEASED; urgency=medium
 
   * Initial PPA build.
   * Add Debian packaging for Gearsystem 3.9.9.
-  * Build against libsdl3-dev from the https://launchpad.net/~johngrimmreaper  PPA.
   * Install the binary under /usr/games.
   * Add a desktop entry and application icon.
   * Add a minimal manual page.
