@@ -335,6 +335,7 @@ jobs:
           unzip -q ${{ env.NAME_UPPER }}.app.zip
           cd ..
           cp download/${{ env.NAME_UPPER }}.app/Contents/MacOS/${{ env.NAME_LOWER }} mcpb/server/
+          cp -r download/${{ env.NAME_UPPER }}.app/Contents/Frameworks mcpb/
           cp -r download/${{ env.NAME_UPPER }}.app/Contents/Resources/shaders/* mcpb/server/shaders/
           cp platforms/shared/gamecontrollerdb.txt mcpb/
           cp -r platforms/shared/desktop/mcp/resources/* mcpb/mcp/resources/
@@ -434,3 +435,15 @@ jobs:
           --generate-notes
       env:
         GITHUB_TOKEN: ${{ github.TOKEN }}
+  release-notes:
+    name: Release Notes
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+    - name: Trigger Release Notes Draft
+      run: gh workflow run release-notes-draft.lock.yml --ref ${{ github.ref_name }} --field release_tag=${{ github.ref_name }}
+      env:
+        GITHUB_TOKEN: ${{ github.TOKEN }}
+        GH_REPO: ${{ github.repository }}

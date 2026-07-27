@@ -17,6 +17,7 @@
  *
  */
 
+#include <string>
 #include "GearsystemCore.h"
 #include "Memory.h"
 #include "Processor.h"
@@ -301,13 +302,11 @@ void GearsystemCore::SaveMemoryDump()
     {
         using namespace std;
 
-        char path[512];
+        string path = string(m_pCartridge->GetFilePath()) + ".dump";
 
-        snprintf(path, sizeof(path), "%s.dump", m_pCartridge->GetFilePath());
+        Log("Saving Memory Dump %s...", path.c_str());
 
-        Log("Saving Memory Dump %s...", path);
-
-        m_pMemory->MemoryDump(path);
+        m_pMemory->MemoryDump(path.c_str());
 
         Debug("Memory Dump Saved");
     }
@@ -321,14 +320,12 @@ void GearsystemCore::SaveDisassembledROM()
     {
         using namespace std;
 
-        char path[512];
+        string path = string(m_pCartridge->GetFilePath()) + ".dis";
 
-        snprintf(path, sizeof(path), "%s.dis", m_pCartridge->GetFilePath());
-
-        Log("Saving Disassembled ROM %s...", path);
+        Log("Saving Disassembled ROM %s...", path.c_str());
 
         ofstream myfile;
-        open_ofstream_utf8(myfile, path, ios::out | ios::trunc);
+        open_ofstream_utf8(myfile, path.c_str(), ios::out | ios::trunc);
 
         if (myfile.is_open())
         {
@@ -404,6 +401,11 @@ Audio* GearsystemCore::GetAudio()
 Video* GearsystemCore::GetVideo()
 {
     return m_pVideo;
+}
+
+Input* GearsystemCore::GetInput()
+{
+    return m_pInput;
 }
 
 void GearsystemCore::SetGlassesConfig(GlassesConfig config)
@@ -540,7 +542,7 @@ void GearsystemCore::ResetROMPreservingRAM(Cartridge::ForceConfiguration* config
         }
         else
         {
-            ResetROM();
+            ResetROM(config);
         }
     }
 }
@@ -655,7 +657,7 @@ void GearsystemCore::LoadRam(const char* szPath, bool fullPath)
             s32 fileSize = (s32)file.tellg();
             file.seekg(0, file.beg);
 
-            if (m_pMemory->GetCurrentRule()->LoadRam(file, fileSize))
+            if ((fileSize > 0) && m_pMemory->GetCurrentRule()->LoadRam(file, fileSize))
             {
                 Debug("RAM loaded");
             }
@@ -808,6 +810,7 @@ bool GearsystemCore::SaveState(std::ostream& stream, size_t& size, bool screensh
     m_pVideo->SaveState(stream);
     m_pInput->SaveState(stream);
     m_pMemory->GetCurrentRule()->SaveState(stream);
+    m_pMemory->GetBootromRule()->SaveState(stream);
     m_pProcessor->GetIOPOrts()->SaveState(stream);
 
 #if defined(__LIBRETRO__)
@@ -1004,12 +1007,14 @@ bool GearsystemCore::LoadState(std::istream& stream)
 
     Debug("Unserializing save state...");
 
-    m_pMemory->LoadState(stream);
+    m_pMemory->LoadState(stream, header.version);
     m_pProcessor->LoadState(stream);
     m_pAudio->LoadState(stream, header.version);
     m_pVideo->LoadState(stream, header.version);
     m_pInput->LoadState(stream);
-    m_pMemory->GetCurrentRule()->LoadState(stream);
+    m_pMemory->GetCurrentRule()->LoadState(stream, header.version);
+    if (header.version >= 104)
+        m_pMemory->GetBootromRule()->LoadState(stream, header.version);
     m_pProcessor->GetIOPOrts()->LoadState(stream);
 
     return true;
@@ -1059,12 +1064,12 @@ bool GearsystemCore::LoadStateV1(std::istream& stream, size_t size)
 
     Log("Loading V1 save state (%d bytes)...", static_cast<int>(size));
 
-    m_pMemory->LoadState(stream);
+    m_pMemory->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pProcessor->LoadState(stream);
     m_pAudio->LoadStateV1(stream);
     m_pVideo->LoadState(stream);
     m_pInput->LoadState(stream);
-    m_pMemory->GetCurrentRule()->LoadState(stream);
+    m_pMemory->GetCurrentRule()->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pProcessor->GetIOPOrts()->LoadState(stream);
 
     return true;
@@ -1171,7 +1176,7 @@ bool GearsystemCore::GetSaveStateScreenshot(int index, const char* path, GS_Save
 {
     using namespace std;
 
-    if (!IsValidPointer(screenshot->data) || (screenshot->size == 0))
+    if (!IsValidPointer(screenshot) || !IsValidPointer(screenshot->data) || (screenshot->size == 0))
     {
         Error("Invalid save state screenshot buffer");
         return false;
@@ -1191,7 +1196,13 @@ bool GearsystemCore::GetSaveStateScreenshot(int index, const char* path, GS_Save
     }
 
     GS_SaveState_Header header;
-    GetSaveStateHeader(index, path, &header);
+
+    if (!GetSaveStateHeader(index, path, &header))
+    {
+        Error("Invalid save state header");
+        stream.close();
+        return false;
+    }
 
     if (header.screenshot_size == 0)
     {

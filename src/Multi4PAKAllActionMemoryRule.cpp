@@ -59,6 +59,7 @@ void Multi4PAKAllActionMemoryRule::PerformWrite(u16 address, u8 value)
                 Debug("--> ** Writing to register $%X %X", address, value);
                 m_iMapperSlot[0] = value;
                 m_iMapperSlotAddress[0] = 0x4000 * (m_iMapperSlot[0] & (m_pCartridge->GetROMBankCount() - 1));
+                m_iMapperSlotAddress[2] = 0x4000 * (((m_iMapperSlot[0] & 0x30) + m_iMapperSlot[2]) & (m_pCartridge->GetROMBankCount() - 1));
                 TraceBankSwitch(address, value);
                 return;
             case 0x7FFF:
@@ -94,13 +95,16 @@ void Multi4PAKAllActionMemoryRule::PerformWrite(u16 address, u8 value)
 
 void Multi4PAKAllActionMemoryRule::Reset()
 {
-    m_iMapperSlot[0] = 0;
-    m_iMapperSlot[1] = 1;
-    m_iMapperSlot[2] = 2;
+    int bankCount = m_pCartridge->GetROMBankCount();
+    int mask = (bankCount > 0) ? (bankCount - 1) : 0;
 
-    m_iMapperSlotAddress[0] = 0x0000;
-    m_iMapperSlotAddress[1] = 0x4000;
-    m_iMapperSlotAddress[2] = 0x8000;
+    m_iMapperSlot[0] = 0;
+    m_iMapperSlot[1] = 1 & mask;
+    m_iMapperSlot[2] = 2 & mask;
+
+    m_iMapperSlotAddress[0] = 0x4000 * m_iMapperSlot[0];
+    m_iMapperSlotAddress[1] = 0x4000 * m_iMapperSlot[1];
+    m_iMapperSlotAddress[2] = 0x4000 * m_iMapperSlot[2];
 }
 
 u8* Multi4PAKAllActionMemoryRule::GetPage(int index)
@@ -125,7 +129,7 @@ void Multi4PAKAllActionMemoryRule::SaveState(std::ostream& stream)
     stream.write(reinterpret_cast<const char*> (m_iMapperSlot), sizeof(m_iMapperSlot));
 }
 
-void Multi4PAKAllActionMemoryRule::LoadState(std::istream& stream)
+void Multi4PAKAllActionMemoryRule::LoadState(std::istream& stream, int)
 {
     using namespace std;
 
