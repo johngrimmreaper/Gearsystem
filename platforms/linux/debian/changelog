@@ -1,19 +1,499 @@
-gearsystem (3.9.14-1~ppa1) UNRELEASED; urgency=medium
+gearsystem (3.9.14-1) UNRELEASED; urgency=medium
 
-  * New upstream release 3.9.14.
-  * Build against libsdl3-dev 3.4.10+ds-1.
-  * Install MIME definitions for Sega Master System, Game Gear,
-    and SG-1000 ROM files.
+  * Hardened MCP server protocol compliance with version negotiation
+    and validation
+  * Added MCP tool behavior annotations
+  * Improved MCP HTTP transport reliability and error handling
+  * Many bug fixes and improvements
 
- -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 27 Jul 2026 16:42:10 +0000
+ -- Reaper <JohnGrimmReaper@disroot.org>  Fri, 24 Jul 2026 11:33:31 +0000
 
-gearsystem (3.9.9-1~ppa1) UNRELEASED; urgency=medium
+gearsystem (3.9.13-1) UNRELEASED; urgency=medium
 
-  * Initial PPA build.
-  * Add Debian packaging for Gearsystem 3.9.9.
-  * Install the binary under /usr/games.
-  * Add a desktop entry and application icon.
-  * Add a minimal manual page.
-  * Clean up packaging metadata for lintian.
+  * Improved MCP tool discoverability and usability for agents
+  * Added configurable screen saver behavior option
+  * Many bug fixes and improvements
 
- -- Nacho Sanchez <863613+drhelius@users.noreply.github.com>  Tue, 25 Mar 2026 00:00:00 +0000
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 18 Jul 2026 00:17:25 +0000
+
+gearsystem (3.9.12-1) UNRELEASED; urgency=medium
+
+  * Run ahead support for reduced input latency
+  * Add macOS Portable Mode
+  * Associate ROM extensions to macOS and Linux desktop apps
+  * Updated controller database
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 29 Jun 2026 20:27:16 +0200
+
+gearsystem (3.9.11-1) UNRELEASED; urgency=medium
+
+  * Variable Refresh Rate ready
+  * Reduced token usage in MCP server with optional tool router
+  * Added WLA-DX, tniASM and Z88DK syntaxes in disassembler
+  * Agentic Workflows
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Thu, 25 Jun 2026 22:52:38 +0200
+
+gearsystem (3.9.10-1) UNRELEASED; urgency=medium
+
+  * Improve accuracy
+  * Improved MCP server
+  * Updated Game Controller DB
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 20 Jun 2026 01:31:08 +0200
+
+gearsystem (3.9.9-1) UNRELEASED; urgency=medium
+
+  * Optional Light or Dark theme
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 31 May 2026 22:17:59 +0200
+
+gearsystem (3.9.8-1) UNRELEASED; urgency=medium
+
+  * Programmable shaders, with built in shaders or custom: CRT, NTSC,
+    ghosting, scanlines, blur...
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 19 May 2026 22:16:42 +0200
+
+gearsystem (3.9.7-1) UNRELEASED; urgency=medium
+
+  * Improved MCP server
+  * Added master volume slider
+  * New option to remove sprite limit
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 16 May 2026 00:55:31 +0200
+
+gearsystem (3.9.6-1) UNRELEASED; urgency=medium
+
+  * Added rewind support
+  * Improved SG-1000 emulation
+  * Improved MCP server + skill
+  * Improved debugger trace logger
+  * RPM repo (experimental)
+  * Updated game controller database
+  * Many bug fixes and improvements
+  * @thiagoharry made their first contribution
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 27 Apr 2026 23:03:44 +0200
+
+gearsystem (3.9.5-1) UNRELEASED; urgency=medium
+
+  * Improved SG-1000 accuracy
+  * [libretro] Added webOS and Linux aarch64 support
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 5 Apr 2026 12:44:30 +0200
+
+gearsystem (3.9.4-1) UNRELEASED; urgency=medium
+
+  * Release 3.9.4.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 5 Apr 2026 12:25:48 +0200
+
+gearsystem (3.9.3-1) UNRELEASED; urgency=medium
+
+  * Improved MCP server + skill with headless mode
+  * Updated game controller database
+  * Bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 30 Mar 2026 15:33:15 +0200
+
+gearsystem (3.9.2-1) UNRELEASED; urgency=medium
+
+  * [debugger] Improve trace logger
+  * [debugger] Improve call stack
+  * [debugger] Improve auto symbol performance
+  * [debugger] Improve PSG viewer
+  * Add PPA repo
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Wed, 25 Mar 2026 19:44:36 +0100
+
+gearsystem (3.9.1-1) UNRELEASED; urgency=medium
+
+  * Improved Game Gear accuracy
+  * Added option for emulating Game Gear 2-ASIC and 1-ASIC
+  * [debugger] Added linear search to memory editor
+  * [debugger] Improved sprite viewer
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 15 Mar 2026 12:28:15 +0100
+
+gearsystem (3.9.0-1) UNRELEASED; urgency=medium
+
+  * Increased accuracy
+  * Desktop app migrated to SDL3 + OGL3
+  * MCP server for AI assisted debugging and hacking
+  * Completely redesigned debugger with new features and windows
+  * Improved audio latency with configurable settings
+  * New option to load default settings
+  * Support for vsync in 120/240 Hz screens
+  * Iratahack mapper
+  * Updated game controller database
+  * Many bug fixes
+  * @iratahack made their first contribution
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 8 Mar 2026 11:23:37 +0100
+
+gearsystem (3.8.6-1) UNRELEASED; urgency=medium
+
+  * VGM Recorder
+  * Add support for Game Gear 93C46 Mapper
+  * Custom shortcuts. Add shortcuts to gamepad buttons
+  * Support for UTF-8 characters in paths
+  * Updated game controller database
+  * Bug fixes
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 8 Dec 2025 18:42:18 +0100
+
+gearsystem (3.8.5-1) UNRELEASED; urgency=medium
+
+  * Update game controller database
+  * Add support for Mega Mode Super Game 30 mapper
+  * Option to enable/disable pause on focus lost
+  * Update icon for macOS
+  * Bug fixes
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Fri, 31 Oct 2025 20:11:06 +0100
+
+gearsystem (3.8.4-1) UNRELEASED; urgency=medium
+
+  * Add gamepad support for L2 / R2 buttons (triggers)
+  * Update game controller database
+  * Improve Memory Editor in Debugger
+  * Bug fixes
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Wed, 27 Aug 2025 14:02:31 +0200
+
+gearsystem (3.8.3-1) UNRELEASED; urgency=medium
+
+  * Improved game controller selection
+  * Updated game controller database
+  * Improved fullscreen mode in Mac
+  * Improved mouse hiding behavior
+  * Replaced GLEW with Glad
+  * Added icon to Windows exe
+  * Bug fixes
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 10 Aug 2025 18:50:17 +0200
+
+gearsystem (3.8.2-1) UNRELEASED; urgency=medium
+
+  * Added cli option for fullscreen mode
+  * Improved full screen behavior
+  * Bug fixes
+  * @alice-mkh made their first contribution
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 8 Jul 2025 18:14:39 +0200
+
+gearsystem (3.8.1-1) UNRELEASED; urgency=medium
+
+  * This release fixes distortion issues and bad accuracy with FM audio.
+  * Fix YM2413 FM sound
+  * Minor performance improvements
+  * NOTE: The savestate file format has changed. New savestates will no
+    longer be compatible with older ones, and vice versa.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Thu, 17 Apr 2025 21:14:00 +0200
+
+gearsystem (3.8.0-1) UNRELEASED; urgency=medium
+
+  * Enhanced memory editor in the debugger
+  * Updated Game Controller database
+  * Improved game controller detection and hotplugging support
+  * Minor bug fixes and improvements
+  * @creamcast made their first contribution
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 14 Apr 2025 10:56:26 +0200
+
+gearsystem (3.7.1-1) UNRELEASED; urgency=medium
+
+  * Bugfix: Some games were unable to detect YM2413 with IO enabled in
+    port 3E
+  * Regression: Stereo audio in Game Gear not working properly
+  * Improve YM2413 quality
+  * Fix emscripten build in Retro Arch
+  * Improve Jumbo Dahjee mapper
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 1 Apr 2025 09:42:33 +0200
+
+gearsystem (3.7.0-1) UNRELEASED; urgency=medium
+
+  * New mappers:
+  * 4 Pak All Action
+  * Jumbo / Dahjee
+  * Improved Light Phaser accuracy
+  * Light Phaser crosshair
+  * Better quality in scanlines with bilinear filter support
+  * Updated Game Controller DB
+  * Minor bugfixes
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 18 Feb 2025 19:25:27 +0100
+
+gearsystem (3.6.1-1) UNRELEASED; urgency=medium
+
+  * New year's release with new features
+  * Light Phaser support.
+  * Paddle Control support.
+  * Multi carts!!!
+  * Zemina Best 25/39/88
+  * Zemina 4-in-1
+  * 11 Hap Gam-Boy (KR)
+  * 2 Hap in 1 (Moai-ui bomul, David-2)
+  * 128 Hap (KR)
+  * Game Mo-eumjip 188 Hap
+  * Game Chongjiphap 200
+  * Super Game 270 Hap / Jaemissneun-270
+  * Super Game World 260/75/30 Hap
+  * Super Multi Game - Super 125/75 in 1
+  * Hi-Com 3-in-1 The Best Game Collection A-F
+  * Hi-Com 8-in-1 The Best Game Collection A-C
+  * Super Game 45/52/150/180/200/270
+  * Jaemiissneun Game Mo-eumjip 42/65 Hap
+  * Mega Mode Super Game 138
+  * Pigu-Wang 7 Hap - Jaemiiss-neun Game Mo-eumjip
+  * Updated GLEW, SDL, Imgui, mINI, miniz and NFD libraries to latest
+    version.
+  * Properly codesign and notarize macOS binaries.
+  * Improved audio client.
+  * Game mode in macOS.
+  * Configuration option to hide left bar in SMS mode.
+  * Manual integer video scale settings.
+  * Add option to unassign controls.
+  * Change custom Imgui styles to green.
+  * Make use of containing ROM folder optional by @TomChapple
+  * Windows ARM64 support by @tordona
+  * Flatpak App Manifest for Gearsystem by @TomChapple
+  * [WiiU] Aroma CFW Compatibility by @Ploggy
+  * ios/tvos: properly set min supported version by @warmenhoven
+  * Quality of life updates.
+  * Minor bugfixes.
+  * @tordona made their first contribution
+  * @Ploggy made their first contribution
+  * @warmenhoven made their first contribution
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 30 Dec 2024 20:56:40 +0100
+
+gearsystem (3.5.0-1) UNRELEASED; urgency=medium
+
+  * Support for YM2413
+  * Native file dialogs
+  * Drag and drop rom files to open
+  * Overscan options
+  * Improved Game Gear timings
+  * Improved PAL detection
+  * Debugger improvements
+  * Custom folders for saves and savestates
+  * Scaling improvements like fit to window size or fit to window height
+  * Hide cursor when hovering output window or when main menu is disabled
+  * Load symbol files from command line
+  * Support for WLA symbol files
+  * Improve input response time
+  * Save screenshots
+  * Support for WSL
+  * Automatic builds in GitHub Actions
+  * Several bug fixes
+  * Add support for zoomed sprites in SMS/GG modes
+  * Pixel perfect rendering even with non integer HDPI values on Windows
+  * Fixed bug where when resetting, the first opcode would not be
+    disassembled. by @samizzo
+  * Added a generalised shortcut system so any gui events can have a
+    shortcut key defined in the config.ini by @samizzo
+  * add retrofw target by @Poligraf
+  * Fix window title flicker by @clbr
+  * Define install and uninstall targets by @TomChapple
+  * Update NFDe implementation to v1.1.1 by @TomChapple
+  * @samizzo made their first contribution
+  * @Poligraf made their first contribution
+  * @clbr made their first contribution
+  * @TomChapple made their first contribution
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 26 Feb 2024 11:59:21 +0100
+
+gearsystem (3.4.1-1) UNRELEASED; urgency=medium
+
+  * RetroArch (libretro):
+  * Fix crash when loading roms.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 4 Sep 2021 11:16:18 +0200
+
+gearsystem (3.4.0-1) UNRELEASED; urgency=medium
+
+  * All platforms:
+  * BIOS support.
+  * 3D glasses support (choose eye).
+  * Janggun mapper.
+  * Fix incorrect region detection.
+  * Many performance improvements.
+  * Several bug fixes.
+  * Windows , Linux and Mac (desktop):
+  * Fullscreen.
+  * Multi-line cheat input to add multiple cheats in batch.
+  * BSD support.
+  * Debugger: go-to address, double click in jumps, back, memory
+    breakpoints.
+  * RetroArch (libretro):
+  * Apple TV
+  * macOS ARM
+  * OpenDingux
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Fri, 13 Aug 2021 23:24:47 +0200
+
+gearsystem (3.3.0-1) UNRELEASED; urgency=medium
+
+  * All platforms:
+  * Many performance improvements.
+  * Several bug fixes.
+  * Windows and Linux (standalone):
+  * Portable Mode. Create a file named portable.ini in the same directory
+    as the application binary.
+  * Windows (standalone):
+  * Added missing dependencies for building with VisualStudio.
+  * RetroArch (libretro):
+  * Remove usage of obsolete Cell SDK in favor of the PSL1GHT SDK.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 14 Feb 2021 20:39:03 +0100
+
+gearsystem (3.2.0-1) UNRELEASED; urgency=medium
+
+  * All platforms:
+  * Improved VDP timing.
+  * Improved sprite accuracy.
+  * Improved memory usage.
+  * Minor bug fixes.
+  * Libretro:
+  * Fixed crashes due to heavy usage of memory in low memory platforms.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Thu, 31 Dec 2020 12:42:50 +0100
+
+gearsystem (3.1.0-1) UNRELEASED; urgency=medium
+
+  * Windows, Linux, macOS and Raspberry Pi 4:
+  * Full Debugger for Master System, Game Gear and SG-1000.
+  * Z80 disassembler with breakpoints and debug symbols.
+  * TMS9918 inspector, including pattern tables, name tables, sprites
+    and palettes.
+  * Memory Editor.
+  * Open rom using cli argument.
+  * Libretro:
+  * Emulation parameters like region, system, mapper, etc.
+  * All platforms:
+  * Load gamepad mappings from file.
+  * Several bug fixes.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 23 May 2020 20:52:56 +0200
+
+gearsystem (3.0.3-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 3.0.3
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 21 Apr 2020 22:14:50 +0200
+
+gearsystem (3.0.2-1) UNRELEASED; urgency=medium
+
+  * Windows, Linux and macOS:
+  * Tweaking options for scanlines, fast forward and dot matrix effect.
+  * Improved gamepad support and configuration.
+  * Add backers into About window.
+  * Raspberry Pi 4:
+  * Desktop app.
+  * All platforms:
+  * Several bug fixes.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 19 Apr 2020 19:50:14 +0200
+
+gearsystem (3.0.1-1) UNRELEASED; urgency=medium
+
+  * Windows, Linux and macOS:
+  * Scanlines.
+  * All platforms:
+  * Several bug fixes.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 12 Apr 2020 21:44:08 +0200
+
+gearsystem (3.0.0-1) UNRELEASED; urgency=medium
+
+  * Windows, Linux and macOS:
+  * Fully redesigned GUI using Dear ImGUI library (No more Qt ).
+  * Fast Forward.
+  * Game Genie and Pro Action Replay cheats support.
+  * Force any aspect of emulation: system, cart region, NTSC/PAL,
+    mapper, etc.
+  * Screen ghosting.
+  * Configurable screen scale and aspect ratio.
+  * Two player support.
+  * Gamepad support.
+  * Open Recent menu.
+  * Save states.
+  * All platforms:
+  * SG-1000 support.
+  * Performance improvements.
+  * Bug fixes.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 11 Apr 2020 13:29:47 +0200
+
+gearsystem (2.6.1-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 2.6.1
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 30 Jun 2019 12:25:05 +0200
+
+gearsystem (2.6.0-1) UNRELEASED; urgency=medium
+
+  * SG-1000 support
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 29 Jun 2019 01:26:54 +0200
+
+gearsystem (2.5.1-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 2.5.1
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 25 Mar 2019 23:37:16 +0100
+
+gearsystem (2.5.0-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 2.5.0
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 25 Mar 2019 23:13:03 +0100
+
+gearsystem (2.2-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 2.2
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Thu, 3 Mar 2016 15:43:23 +0100
+
+gearsystem (2.1-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 2.1
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sun, 23 Nov 2014 00:00:45 +0100
+
+gearsystem (2.0-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 2.0
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 10 Nov 2014 20:23:19 +0100
+
+gearsystem (1.2-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 1.2
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Mon, 14 Jul 2014 13:05:02 +0200
+
+gearsystem (1.1-1) UNRELEASED; urgency=medium
+
+  * Release gearsystem-1.1.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 24 Jun 2014 20:39:08 +0200
+
+gearsystem (1.0-1) UNRELEASED; urgency=medium
+
+  * Gearsystem 1.0
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Fri, 1 Nov 2013 00:59:22 +0100
