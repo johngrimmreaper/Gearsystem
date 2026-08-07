@@ -374,6 +374,7 @@ void Processor::OPCodeED0x71()
 {
     // OUT (C),0*
     UndocumentedOPCode();
+    WZ.SetValue(BC.GetValue() + 1);
     m_pIOPorts->DoOutput(BC.GetLow(), 0);
 }
 
@@ -414,14 +415,12 @@ void Processor::OPCodeED0x78()
 {
     // IN A,(C)
     OPCodes_IN_C(AF.GetHighRegister());
-    WZ.SetValue(BC.GetValue() + 1);
 }
 
 void Processor::OPCodeED0x79()
 {
     // OUT (C),A
     OPCodes_OUT_C(AF.GetHighRegister());
-    WZ.SetValue(BC.GetValue() + 1);
 }
 
 void Processor::OPCodeED0x7A()
@@ -513,6 +512,7 @@ void Processor::OPCodeED0xB0()
     {
         PC.Decrement();
         PC.Decrement();
+        ToggleXYFlagsFromResult(PC.GetHigh());
         WZ.SetValue(PC.GetValue() + 1);
         m_iTStates += 5;
     }
@@ -526,6 +526,7 @@ void Processor::OPCodeED0xB1()
     {
         PC.Decrement();
         PC.Decrement();
+        ToggleXYFlagsFromResult(PC.GetHigh());
         WZ.SetValue(PC.GetValue() + 1);
         m_iTStates += 5;
     }
@@ -534,25 +535,17 @@ void Processor::OPCodeED0xB1()
 void Processor::OPCodeED0xB2()
 {
     // INIR
-    OPCodes_INI();
+    u8 parity_result = OPCodes_INI();
     if (BC.GetHigh() != 0)
-    {
-        PC.Decrement();
-        PC.Decrement();
-        m_iTStates += 5;
-    }
+        OPCodes_BlockIORepeat(parity_result);
 }
 
 void Processor::OPCodeED0xB3()
 {
     // OTIR
-    OPCodes_OUTI();
+    u8 parity_result = OPCodes_OUTI();
     if (BC.GetHigh() != 0)
-    {
-        PC.Decrement();
-        PC.Decrement();
-        m_iTStates += 5;
-    }
+        OPCodes_BlockIORepeat(parity_result);
 }
 
 void Processor::OPCodeED0xB8()
@@ -563,6 +556,7 @@ void Processor::OPCodeED0xB8()
     {
         PC.Decrement();
         PC.Decrement();
+        ToggleXYFlagsFromResult(PC.GetHigh());
         WZ.SetValue(PC.GetValue() + 1);
         m_iTStates += 5;
     }
@@ -576,6 +570,7 @@ void Processor::OPCodeED0xB9()
     {
         PC.Decrement();
         PC.Decrement();
+        ToggleXYFlagsFromResult(PC.GetHigh());
         WZ.SetValue(PC.GetValue() + 1);
         m_iTStates += 5;
     }
@@ -584,23 +579,15 @@ void Processor::OPCodeED0xB9()
 void Processor::OPCodeED0xBA()
 {
     // INDR
-    OPCodes_IND();
+    u8 parity_result = OPCodes_IND();
     if (BC.GetHigh() != 0)
-    {
-        PC.Decrement();
-        PC.Decrement();
-        m_iTStates += 5;
-    }
+        OPCodes_BlockIORepeat(parity_result);
 }
 
 void Processor::OPCodeED0xBB()
 {
     // OTDR
-    OPCodes_OUTD();
+    u8 parity_result = OPCodes_OUTD();
     if (BC.GetHigh() != 0)
-    {
-        PC.Decrement();
-        PC.Decrement();
-        m_iTStates += 5;
-    }
+        OPCodes_BlockIORepeat(parity_result);
 }

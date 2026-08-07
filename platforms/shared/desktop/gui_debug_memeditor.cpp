@@ -98,8 +98,9 @@ void MemEditor::Reset(const char* title, uint8_t* mem_data, int mem_size, int ba
 
     snprintf(m_hex_addr_format, sizeof(m_hex_addr_format), "%%0%dX", m_hex_addr_digits);
 
-    m_search_data = new uint8_t[m_mem_size * m_mem_word];
-    memcpy(m_search_data, m_mem_data, m_mem_size * m_mem_word);
+    size_t search_size = (size_t)m_mem_size * (size_t)m_mem_word;
+    m_search_data = new uint8_t[search_size];
+    memcpy(m_search_data, m_mem_data, search_size);
 }
 
 void MemEditor::Draw(bool ascii, bool preview, bool options, bool cursors)
@@ -655,8 +656,9 @@ void MemEditor::DrawDataPreview(int address)
     int data = 0;
     int data_size = DataPreviewSize();
     int final_address = address * m_mem_word;
+    bool preview_in_bounds = (final_address + data_size) <= (m_mem_size * m_mem_word);
 
-    for (int i = 0; i < data_size; i++)
+    for (int i = 0; preview_in_bounds && i < data_size; i++)
     {
         if (m_options.preview_endianess == 0)
             data |= m_mem_data[final_address + i] << (i * 8);
@@ -668,21 +670,21 @@ void MemEditor::DrawDataPreview(int address)
 
     ImGui::TextColored(color, "Dec:");
     ImGui::SameLine();
-    if (final_address + data_size <= (m_mem_size * m_mem_word))
+    if (preview_in_bounds)
         DrawDataPreviewAsDec(data);
     else
         ImGui::Text(" ");
 
     ImGui::TextColored(color, "Hex:");
     ImGui::SameLine();
-    if (final_address + data_size <= (m_mem_size * m_mem_word))
+    if (preview_in_bounds)
         DrawDataPreviewAsHex(data);
     else
         ImGui::Text(" ");
 
     ImGui::TextColored(color, "Bin:");
     ImGui::SameLine();
-    if (final_address + data_size <= (m_mem_size * m_mem_word))
+    if (preview_in_bounds)
         DrawDataPreviewAsBin(data);
     else
         ImGui::Text(" ");
@@ -994,7 +996,8 @@ void MemEditor::SearchCapture()
 {
     if (!IsValidPointer(m_mem_data) || !IsValidPointer(m_search_data) || m_mem_size <= 0)
         return;
-    memcpy(m_search_data, m_mem_data, m_mem_size * m_mem_word);
+    size_t search_size = (size_t)m_mem_size * (size_t)m_mem_word;
+    memcpy(m_search_data, m_mem_data, search_size);
 }
 
 int MemEditor::PerformSearch(int op, int compare_type, int compare_value, int data_type)
@@ -1788,14 +1791,21 @@ void MemEditor::SetValueToSelection(int value)
     int start = selection_start * m_mem_word;
     int end = (selection_end + 1) * m_mem_word;
     int total = m_mem_size * m_mem_word;
-    int mask = m_mem_word == 1 ? 0xFF : 0xFFFF;
 
     if (start < 0 || end > total || start >= end)
         return;
 
-    for (int i = start; i < end; i++)
+    if (m_mem_word == 1)
     {
-        m_mem_data[i] = value & mask;
+        for (int i = selection_start; i <= selection_end; i++)
+            m_mem_data[i] = (uint8_t)value;
+    }
+    else if (m_mem_word == 2)
+    {
+        uint16_t* mem_data_16 = (uint16_t*)m_mem_data;
+
+        for (int i = selection_start; i <= selection_end; i++)
+            mem_data_16[i] = (uint16_t)value;
     }
 }
 

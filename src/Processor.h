@@ -100,7 +100,7 @@ public:
     void SetIOPOrts(IOPorts* pIOPorts);
     IOPorts* GetIOPOrts();
     void SaveState(std::ostream& stream);
-    void LoadState(std::istream& stream);
+    void LoadState(std::istream& stream, int version);
     void SetProActionReplayCheat(const char* szCheat);
     void ClearProActionReplayCheats();
     ProcessorState* GetState();
@@ -150,6 +150,8 @@ private:
     SixteenBitRegister WZ;
     u8 I;
     u8 R;
+    u8 m_Q;
+    u8 m_QTemp;
     bool m_bIFF1;
     bool m_bIFF2;
     bool m_bHalt;
@@ -192,6 +194,7 @@ private:
     u8 FetchOPCode();
     u16 FetchArg16();
     void ExecuteOPCode();
+    void ExecuteInputLastCycle();
     void LeaveHalt();
     void ClearAllFlags();
     void ToggleZeroFlagFromResult(u16 result);
@@ -236,11 +239,12 @@ private:
     void OPCodes_RET();
     void OPCodes_RET_Conditional(bool condition);
     void OPCodes_IN_C(u8* reg);
-    void OPCodes_INI();
-    void OPCodes_IND();
+    u8 OPCodes_INI();
+    u8 OPCodes_IND();
     void OPCodes_OUT_C(u8* reg);
-    void OPCodes_OUTI();
-    void OPCodes_OUTD();
+    u8 OPCodes_OUTI();
+    u8 OPCodes_OUTD();
+    void OPCodes_BlockIORepeat(u8 parity_result);
     void OPCodes_EX(SixteenBitRegister* reg1, SixteenBitRegister* reg2);
     void OPCodes_OR(u8 number);
     void OPCodes_XOR(u8 number);
