@@ -29,6 +29,8 @@ inline u8 Processor::FetchOPCode()
 {
     u8 opcode = m_pMemory->Read(PC.GetValue());
     PC.Increment();
+    m_Q = m_QTemp;
+    m_QTemp = FLAG_X | FLAG_Y;
     return opcode;
 }
 
@@ -93,21 +95,25 @@ inline void Processor::ToggleParityFlagFromResult(u8 result)
 
 inline void Processor::SetFlag(u8 flag)
 {
+    m_QTemp = 0;
     AF.SetLow(flag);
 }
 
 inline void Processor::FlipFlag(u8 flag)
 {
+    m_QTemp = 0;
     AF.SetLow(AF.GetLow() ^ flag);
 }
 
 inline void Processor::ToggleFlag(u8 flag)
 {
+    m_QTemp = 0;
     AF.SetLow(AF.GetLow() | flag);
 }
 
 inline void Processor::ClearFlag(u8 flag)
 {
+    m_QTemp = 0;
     AF.SetLow(AF.GetLow() & (~flag));
 }
 
@@ -134,7 +140,7 @@ inline void Processor::StackPop(SixteenBitRegister* reg)
 
 inline void Processor::SetInterruptMode(int mode)
 {
-    if (mode == 1)
+    if (mode >= 0 && mode <= 2)
     {
         m_iInterruptMode = mode;
     }
@@ -167,6 +173,7 @@ inline u16 Processor::GetEffectiveAddress()
             if (m_bPrefixedCBOpcode)
             {
                 address += static_cast<s8> (m_PrefixedCBValue);
+                WZ.SetValue(address);
             }
             else
             {
@@ -182,6 +189,7 @@ inline u16 Processor::GetEffectiveAddress()
             if (m_bPrefixedCBOpcode)
             {
                 address += static_cast<s8> (m_PrefixedCBValue);
+                WZ.SetValue(address);
             }
             else
             {
@@ -363,7 +371,9 @@ inline void Processor::OPCodes_JP_nn_Conditional(bool condition)
 inline void Processor::OPCodes_JR_n()
 {
     u16 pc = PC.GetValue();
-    PC.SetValue(pc + 1 + (static_cast<s8> (m_pMemory->Read(pc))));
+    s8 displacement = static_cast<s8> (m_pMemory->Read(pc));
+    PC.SetValue(pc + 1 + displacement);
+    WZ.SetValue(PC.GetValue());
 }
 
 inline void Processor::OPCodes_JR_n_conditional(bool condition)
@@ -374,7 +384,10 @@ inline void Processor::OPCodes_JR_n_conditional(bool condition)
         m_bBranchTaken = true;
     }
     else
+    {
+        m_pMemory->Read(PC.GetValue());
         PC.Increment();
+    }
 }
 
 inline void Processor::OPCodes_RET()
@@ -397,6 +410,7 @@ inline void Processor::OPCodes_RET_Conditional(bool condition)
 
 inline void Processor::OPCodes_IN_C(u8* reg)
 {
+    WZ.SetValue(BC.GetValue() + 1);
     u8 result = m_pIOPorts->DoInput(BC.GetLow());
     if (IsValidPointer(reg))
         *reg = result;
@@ -407,18 +421,19 @@ inline void Processor::OPCodes_IN_C(u8* reg)
     ToggleXYFlagsFromResult(result);
 }
 
-inline void Processor::OPCodes_INI()
+inline u8 Processor::OPCodes_INI()
 {
     WZ.SetValue(BC.GetValue() + 1);
     u8 result = m_pIOPorts->DoInput(BC.GetLow());
     m_pMemory->Write(HL.GetValue(), result);
     OPCodes_DEC(BC.GetHighRegister());
     HL.Increment();
+    int sum = result + ((BC.GetLow() + 1) & 0xFF);
     if ((result & 0x80) != 0)
         ToggleFlag(FLAG_NEGATIVE);
     else
         ClearFlag(FLAG_NEGATIVE);
-    if ((result + ((BC.GetLow() + 1) & 0xFF)) > 0xFF)
+    if (sum > 0xFF)
     {
         ToggleFlag(FLAG_CARRY);
         ToggleFlag(FLAG_HALF);
@@ -428,24 +443,24 @@ inline void Processor::OPCodes_INI()
         ClearFlag(FLAG_CARRY);
         ClearFlag(FLAG_HALF);
     }
-    if (((result + ((BC.GetLow() + 1) & 0xFF)) & 0x07) ^ BC.GetHigh())
-        ToggleFlag(FLAG_PARITY);
-    else
-        ClearFlag(FLAG_PARITY);
+    u8 parity_result = (sum & 0x07) ^ BC.GetHigh();
+    ToggleParityFlagFromResult(parity_result);
+    return parity_result;
 }
 
-inline void Processor::OPCodes_IND()
+inline u8 Processor::OPCodes_IND()
 {
     WZ.SetValue(BC.GetValue() - 1);
     u8 result = m_pIOPorts->DoInput(BC.GetLow());
     m_pMemory->Write(HL.GetValue(), result);
     OPCodes_DEC(BC.GetHighRegister());
     HL.Decrement();
+    int sum = result + ((BC.GetLow() - 1) & 0xFF);
     if ((result & 0x80) != 0)
         ToggleFlag(FLAG_NEGATIVE);
     else
         ClearFlag(FLAG_NEGATIVE);
-    if ((result + ((BC.GetLow() - 1) & 0xFF)) > 0xFF)
+    if (sum > 0xFF)
     {
         ToggleFlag(FLAG_CARRY);
         ToggleFlag(FLAG_HALF);
@@ -455,29 +470,30 @@ inline void Processor::OPCodes_IND()
         ClearFlag(FLAG_CARRY);
         ClearFlag(FLAG_HALF);
     }
-    if (((result + ((BC.GetLow() - 1) & 0xFF)) & 0x07) ^ BC.GetHigh())
-        ToggleFlag(FLAG_PARITY);
-    else
-        ClearFlag(FLAG_PARITY);
+    u8 parity_result = (sum & 0x07) ^ BC.GetHigh();
+    ToggleParityFlagFromResult(parity_result);
+    return parity_result;
 }
 
 inline void Processor::OPCodes_OUT_C(u8* reg)
 {
+    WZ.SetValue(BC.GetValue() + 1);
     m_pIOPorts->DoOutput(BC.GetLow(), *reg);
 }
 
-inline void Processor::OPCodes_OUTI()
+inline u8 Processor::OPCodes_OUTI()
 {
     u8 result = m_pMemory->Read(HL.GetValue());
     m_pIOPorts->DoOutput(BC.GetLow(), result);
     OPCodes_DEC(BC.GetHighRegister());
     WZ.SetValue(BC.GetValue() + 1);
     HL.Increment();
+    int sum = HL.GetLow() + result;
     if ((result & 0x80) != 0)
         ToggleFlag(FLAG_NEGATIVE);
     else
         ClearFlag(FLAG_NEGATIVE);
-    if ((HL.GetLow() + result) > 0xFF)
+    if (sum > 0xFF)
     {
         ToggleFlag(FLAG_CARRY);
         ToggleFlag(FLAG_HALF);
@@ -487,24 +503,24 @@ inline void Processor::OPCodes_OUTI()
         ClearFlag(FLAG_CARRY);
         ClearFlag(FLAG_HALF);
     }
-    if (((HL.GetLow() + result) & 0x07) ^ BC.GetHigh())
-        ToggleFlag(FLAG_PARITY);
-    else
-        ClearFlag(FLAG_PARITY);
+    u8 parity_result = (sum & 0x07) ^ BC.GetHigh();
+    ToggleParityFlagFromResult(parity_result);
+    return parity_result;
 }
 
-inline void Processor::OPCodes_OUTD()
+inline u8 Processor::OPCodes_OUTD()
 {
     u8 result = m_pMemory->Read(HL.GetValue());
     m_pIOPorts->DoOutput(BC.GetLow(), result);
     OPCodes_DEC(BC.GetHighRegister());
     WZ.SetValue(BC.GetValue() - 1);
     HL.Decrement();
+    int sum = HL.GetLow() + result;
     if ((result & 0x80) != 0)
         ToggleFlag(FLAG_NEGATIVE);
     else
         ClearFlag(FLAG_NEGATIVE);
-    if ((HL.GetLow() + result) > 0xFF)
+    if (sum > 0xFF)
     {
         ToggleFlag(FLAG_CARRY);
         ToggleFlag(FLAG_HALF);
@@ -514,10 +530,45 @@ inline void Processor::OPCodes_OUTD()
         ClearFlag(FLAG_CARRY);
         ClearFlag(FLAG_HALF);
     }
-    if (((HL.GetLow() + result) & 0x07) ^ BC.GetHigh())
-        ToggleFlag(FLAG_PARITY);
+    u8 parity_result = (sum & 0x07) ^ BC.GetHigh();
+    ToggleParityFlagFromResult(parity_result);
+    return parity_result;
+}
+
+inline void Processor::OPCodes_BlockIORepeat(u8 parity_result)
+{
+    PC.Decrement();
+    PC.Decrement();
+
+    u8 counter = BC.GetHigh();
+    u8 flags = counter & FLAG_SIGN;
+    flags |= PC.GetHigh() & (FLAG_Y | FLAG_X);
+    flags |= AF.GetLow() & (FLAG_NEGATIVE | FLAG_CARRY);
+
+    if ((flags & FLAG_CARRY) != 0)
+    {
+        if ((flags & FLAG_NEGATIVE) != 0)
+        {
+            if ((counter & 0x0F) == 0)
+                flags |= FLAG_HALF;
+            parity_result ^= (counter - 1) & 0x07;
+        }
+        else
+        {
+            if ((counter & 0x0F) == 0x0F)
+                flags |= FLAG_HALF;
+            parity_result ^= (counter + 1) & 0x07;
+        }
+    }
     else
-        ClearFlag(FLAG_PARITY);
+    {
+        parity_result ^= counter & 0x07;
+    }
+
+    AF.SetLow(flags);
+    ToggleParityFlagFromResult(parity_result);
+    WZ.SetValue(PC.GetValue() + 1);
+    m_iTStates += 5;
 }
 
 inline void Processor::OPCodes_EX(SixteenBitRegister* reg1, SixteenBitRegister* reg2)
@@ -1170,8 +1221,13 @@ inline void Processor::OPCodes_BIT(u8* reg, int bit)
 {
     IsSetFlag(FLAG_CARRY) ? SetFlag(FLAG_CARRY) : ClearAllFlags();
     u8 value = *reg;
+    u8 xy = value;
     if (IsPrefixedInstruction())
-        value = m_pMemory->Read(GetEffectiveAddress());
+    {
+        u16 address = GetEffectiveAddress();
+        value = m_pMemory->Read(address);
+        xy = address >> 8;
+    }
     if (!IsSetBit(value, bit))
     {
         ToggleFlag(FLAG_ZERO);
@@ -1179,9 +1235,9 @@ inline void Processor::OPCodes_BIT(u8* reg, int bit)
     }    
     else if (bit == 7)
         ToggleFlag(FLAG_SIGN);
-    if (IsSetBit(value, 3))
+    if (IsSetBit(xy, 3))
         ToggleFlag(FLAG_X);
-    if (IsSetBit(value, 5))
+    if (IsSetBit(xy, 5))
         ToggleFlag(FLAG_Y);
     ToggleFlag(FLAG_HALF);
 }

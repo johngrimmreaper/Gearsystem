@@ -281,6 +281,7 @@ void Processor::OPCode0x26()
 void Processor::OPCode0x27()
 {
     // DAA
+    m_QTemp = 0;
     int idx = AF.GetHigh();
     if (IsSetFlag(FLAG_CARRY))
         idx |= 0x100; 
@@ -395,6 +396,7 @@ void Processor::OPCode0x36()
         u8 d = m_pMemory->Read(PC.GetValue());
         u8 n = m_pMemory->Read(PC.GetValue() + 1);
         u16 address = IX.GetValue() + static_cast<s8> (d);
+        WZ.SetValue(address);
         m_pMemory->Write(address, n);
         PC.Increment();
     }
@@ -403,6 +405,7 @@ void Processor::OPCode0x36()
         u8 d = m_pMemory->Read(PC.GetValue());
         u8 n = m_pMemory->Read(PC.GetValue() + 1);
         u16 address = IY.GetValue() + static_cast<s8> (d);
+        WZ.SetValue(address);
         m_pMemory->Write(address, n);
         PC.Increment();
     }
@@ -417,7 +420,7 @@ void Processor::OPCode0x37()
     ToggleFlag(FLAG_CARRY);
     ClearFlag(FLAG_HALF);
     ClearFlag(FLAG_NEGATIVE);
-    ToggleXYFlagsFromResult(AF.GetHigh());
+    ToggleXYFlagsFromResult((AF.GetLow() & m_Q) | AF.GetHigh());
 }
 
 void Processor::OPCode0x38()
@@ -475,7 +478,7 @@ void Processor::OPCode0x3F()
     else
         ClearFlag(FLAG_HALF);
     ClearFlag(FLAG_NEGATIVE);
-    ToggleXYFlagsFromResult(AF.GetHigh());
+    ToggleXYFlagsFromResult((AF.GetLow() & m_Q) | AF.GetHigh());
 }
 
 void Processor::OPCode0x40()
@@ -1429,22 +1432,20 @@ void Processor::OPCode0xDA()
 void Processor::OPCode0xDB()
 {
     // IN A,(n)
-    if (m_bInputLastCycle)
-    {
-        u8 a = AF.GetHigh();
-        u8 port = m_pMemory->Read(PC.GetValue());
-        PC.Increment();
-        AF.SetHigh(m_pIOPorts->DoInput(port));
-        WZ.SetValue((a << 8) | (port + 1));
-        m_iTStates -= 10;
-        m_bInputLastCycle = false;
-    }
-    else
-    {
-        PC.Decrement();
-        m_iTStates -= 1;
-        m_bInputLastCycle = true;
-    }
+    m_iTStates -= 1;
+    m_bInputLastCycle = true;
+}
+
+void Processor::ExecuteInputLastCycle()
+{
+    m_CurrentPrefix = 0x00;
+    u8 a = AF.GetHigh();
+    u8 port = m_pMemory->Read(PC.GetValue());
+    PC.Increment();
+    AF.SetHigh(m_pIOPorts->DoInput(port));
+    WZ.SetValue((a << 8) + port + 1);
+    m_iTStates += 1;
+    m_bInputLastCycle = false;
 }
 
 void Processor::OPCode0xDC()
@@ -1498,8 +1499,8 @@ void Processor::OPCode0xE3()
     u8 h = reg->GetHigh();
     reg->SetLow(m_pMemory->Read(SP.GetValue()));
     reg->SetHigh(m_pMemory->Read(SP.GetValue() + 1));
-    m_pMemory->Write(SP.GetValue(), l);
     m_pMemory->Write(SP.GetValue() + 1, h);
+    m_pMemory->Write(SP.GetValue(), l);
     WZ.SetValue(reg->GetValue());
 }
 
