@@ -33,11 +33,15 @@ Video::Video(Memory* pMemory, Processor* pProcessor, Cartridge* pCartridge)
     InitPointer(m_pVdpVRAM);
     InitPointer(m_pVdpCRAM);
     InitPointer(m_pTraceLogger);
+    m_bGGPaletteExternalAccess = false;
     m_bFirstByteInSequence = false;
     for (int i = 0; i < 16; i++)
         m_VdpRegister[i] = 0;
     m_VdpCode = 0;
     m_VdpBuffer = 0;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    m_VdpBufferAddress = 0;
+#endif
     m_VdpAddress = 0;
     m_iVCounter = 0;
     m_iHCounter = 0;
@@ -108,12 +112,55 @@ void Video::Init()
         m_SG1000_palette_555_rgb_sms,
         m_SG1000_palette_565_bgr_sms,
         m_SG1000_palette_555_bgr_sms);
+    InitOutputPalettes();
     Reset(false, false);
 }
 
 void Video::SetTraceLogger(TraceLogger* pTraceLogger)
 {
     m_pTraceLogger = pTraceLogger;
+}
+
+void Video::LogVDPEvent(u8 event, u8 raw, u8 effective, u16 auxiliary, u8 reg, u8 status_before, u8 status_after, u16 address)
+{
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    if (event == TRACE_VDP_CRAM_WRITE)
+    {
+        effective = m_pVdpCRAM[address & ((m_bGameGear && !m_bGameGearSMSMode) ? 0x3F : 0x1F)];
+        if (m_bGameGear && !m_bGameGearSMSMode)
+        {
+            u16 color_addr = address & 0x3E;
+            auxiliary = m_pVdpCRAM[color_addr] | ((m_pVdpCRAM[color_addr + 1] & 0x0F) << 8);
+        }
+        else
+            auxiliary = raw & 0x3F;
+    }
+    else if (event == TRACE_VDP_DATA_WRITE)
+        effective = m_pVdpVRAM[address & 0x3FFF];
+    GS_Trace_Entry e = {};
+    e.type = TRACE_VDP;
+    e.vdp.event = event;
+    e.vdp.reg = reg;
+    e.vdp.raw = raw;
+    e.vdp.effective = effective;
+    e.vdp.code = m_VdpCode;
+    e.vdp.status_before = status_before;
+    e.vdp.status_after = status_after;
+    e.vdp.address = address == 0xFFFF ? m_VdpAddress : address;
+    e.vdp.line = (u16)m_iRenderLine;
+    e.vdp.hpos = (u16)m_iCycleCounter;
+    e.vdp.auxiliary = auxiliary;
+    m_pTraceLogger->TraceLog(e);
+#else
+    UNUSED(event);
+    UNUSED(raw);
+    UNUSED(effective);
+    UNUSED(auxiliary);
+    UNUSED(reg);
+    UNUSED(status_before);
+    UNUSED(status_after);
+    UNUSED(address);
+#endif
 }
 
 void Video::SetNoSpriteLimit(bool noSpriteLimit)
@@ -134,6 +181,9 @@ void Video::Reset(bool bGameGear, bool bPAL, int iGGASIC, bool bGameGearSMSMode)
     m_iHCounter = 0;
     m_VdpCode = 0;
     m_VdpBuffer = 0;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    m_VdpBufferAddress = 0;
+#endif
     m_VdpAddress = 0;
     m_VdpStatus = 0;
     m_ScrollX = 0;
@@ -147,6 +197,8 @@ void Video::Reset(bool bGameGear, bool bPAL, int iGGASIC, bool bGameGearSMSMode)
         m_pVdpVRAM[i] = 0;
     for (int i = 0; i < 0x40; i++)
         m_pVdpCRAM[i] = 0;
+
+    RebuildGGPalette();
 
     m_VdpRegister[0] = 0x36;
     m_VdpRegister[1] = (m_pCartridge->GetFeatures() & GS_DB_FEATURE_INITIAL_VINT) ? 0xA0 : 0x80;
@@ -235,6 +287,12 @@ void Video::Reset(bool bGameGear, bool bPAL, int iGGASIC, bool bGameGearSMSMode)
     }
 }
 
+void Video::RebuildGGPalette()
+{
+    for (int i = 0; i < 32; i++)
+        UpdateGGPalette(i);
+}
+
 bool Video::Tick(unsigned int clockCycles)
 {
     int max_height = m_bExtendedMode224 ? 224 : 192;
@@ -256,14 +314,7 @@ bool Video::Tick(unsigned int clockCycles)
         {
             m_pProcessor->RequestINT(true);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-            if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-            {
-                GS_Trace_Entry e = {};
-                e.type = TRACE_VDP_STATUS;
-                e.vdp_status.event = GS_VDP_EVENT_VINT;
-                e.vdp_status.line = (u16)m_iRenderLine;
-                m_pTraceLogger->TraceLog(e);
-            }
+            TraceVDPEvent(TRACE_VDP_VINT_REQUEST, 0, 1);
 #endif
         }
     }
@@ -274,15 +325,7 @@ bool Video::Tick(unsigned int clockCycles)
         m_LineEvents.display = true;
         m_bDisplayEnabled = IsSetBit(m_VdpRegister[1], 6);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-        if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-        {
-            GS_Trace_Entry e = {};
-            e.type = TRACE_VDP_STATUS;
-            e.vdp_status.event = GS_VDP_EVENT_DISPLAY;
-            e.vdp_status.line = (u16)m_iRenderLine;
-            e.vdp_status.value = m_bDisplayEnabled ? 1 : 0;
-            m_pTraceLogger->TraceLog(e);
-        }
+        TraceVDPEvent(TRACE_VDP_DISPLAY_LATCH, m_VdpRegister[1], m_bDisplayEnabled ? 1 : 0);
 #endif
     }
 
@@ -292,15 +335,7 @@ bool Video::Tick(unsigned int clockCycles)
         m_LineEvents.scrollx = true;
         m_ScrollX = m_VdpRegister[8];   // latch scroll X
 #if !defined(GS_DISABLE_DISASSEMBLER)
-        if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-        {
-            GS_Trace_Entry e = {};
-            e.type = TRACE_VDP_STATUS;
-            e.vdp_status.event = GS_VDP_EVENT_SCROLL_X;
-            e.vdp_status.line = (u16)m_iRenderLine;
-            e.vdp_status.value = m_ScrollX;
-            m_pTraceLogger->TraceLog(e);
-        }
+        TraceVDPEvent(TRACE_VDP_SCROLL_X_LATCH, m_VdpRegister[8], m_ScrollX);
 #endif
     }
 
@@ -320,14 +355,7 @@ bool Video::Tick(unsigned int clockCycles)
                     {
                         m_pProcessor->RequestINT(true);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-                        if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-                        {
-                            GS_Trace_Entry e = {};
-                            e.type = TRACE_VDP_STATUS;
-                            e.vdp_status.event = GS_VDP_EVENT_HINT;
-                            e.vdp_status.line = (u16)m_iRenderLine;
-                            m_pTraceLogger->TraceLog(e);
-                        }
+                        TraceVDPEvent(TRACE_VDP_HINT_REQUEST, 0, 1, (u16)m_iVdpRegister10Counter);
 #endif
                     }
                 }
@@ -351,15 +379,7 @@ bool Video::Tick(unsigned int clockCycles)
             m_ScrollY = m_VdpRegister[9];   // latch scroll Y
             m_iVCounter = 0;
 #if !defined(GS_DISABLE_DISASSEMBLER)
-            if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-            {
-                GS_Trace_Entry e = {};
-                e.type = TRACE_VDP_STATUS;
-                e.vdp_status.event = GS_VDP_EVENT_SCROLL_Y;
-                e.vdp_status.line = (u16)m_iRenderLine;
-                e.vdp_status.value = m_ScrollY;
-                m_pTraceLogger->TraceLog(e);
-            }
+            TraceVDPEvent(TRACE_VDP_SCROLL_Y_LATCH, m_VdpRegister[9], m_ScrollY);
 #endif
         }
     }
@@ -370,16 +390,12 @@ bool Video::Tick(unsigned int clockCycles)
         m_LineEvents.vintFlag = true;
         if (m_iRenderLine == (max_height + 1))
         {
+#if !defined(GS_DISABLE_DISASSEMBLER)
+            u8 status_before = m_VdpStatus;
+#endif
             m_VdpStatus = SetBit(m_VdpStatus, 7);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-            if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-            {
-                GS_Trace_Entry e = {};
-                e.type = TRACE_VDP_STATUS;
-                e.vdp_status.event = GS_VDP_EVENT_VINT_FLAG;
-                e.vdp_status.line = (u16)m_iRenderLine;
-                m_pTraceLogger->TraceLog(e);
-            }
+            TraceVDPEvent(TRACE_VDP_VINT_FLAG, 0, 1, 0, 0, status_before, m_VdpStatus);
 #endif
         }
     }
@@ -393,17 +409,12 @@ bool Video::Tick(unsigned int clockCycles)
         if (m_iCycleCounter >= col_cycle)
         {
             m_bSpriteCollisionRequest = false;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+            u8 status_before = m_VdpStatus;
+#endif
             m_VdpStatus = SetBit(m_VdpStatus, 5);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-            if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-            {
-                GS_Trace_Entry e = {};
-                e.type = TRACE_VDP_STATUS;
-                e.vdp_status.event = GS_VDP_EVENT_SPRITE_COL;
-                e.vdp_status.line = (u16)m_iRenderLine;
-                e.vdp_status.value = (u8)m_iSpriteCollisionX;
-                m_pTraceLogger->TraceLog(e);
-            }
+            TraceVDPEvent(TRACE_VDP_SPRITE_COLLISION, (u8)m_iSpriteCollisionX, 1, (u16)m_iSpriteCollisionX, 0, status_before, m_VdpStatus);
 #endif
         }
     }
@@ -416,16 +427,12 @@ bool Video::Tick(unsigned int clockCycles)
         if (m_bSpriteOvrRequest)
         {
             m_bSpriteOvrRequest = false;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+            u8 status_before = m_VdpStatus;
+#endif
             m_VdpStatus = SetBit(m_VdpStatus, 6);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-            if (m_pTraceLogger->IsEnabled(TRACE_VDP_STATUS))
-            {
-                GS_Trace_Entry e = {};
-                e.type = TRACE_VDP_STATUS;
-                e.vdp_status.event = GS_VDP_EVENT_SPRITE_OVR;
-                e.vdp_status.line = (u16)m_iRenderLine;
-                m_pTraceLogger->TraceLog(e);
-            }
+            TraceVDPEvent(TRACE_VDP_SPRITE_OVERFLOW, 0, 1, 0, 0, status_before, m_VdpStatus);
 #endif
         }
     }
@@ -477,6 +484,9 @@ bool Video::Tick(unsigned int clockCycles)
 void Video::LatchHCounter()
 {
     m_iHCounter = kVdpHCounter[m_iCycleCounter % GS_CYCLES_PER_LINE];
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    TraceVDPEvent(TRACE_VDP_TIMING, 0, (u8)m_iHCounter);
+#endif
 }
 
 u8 Video::GetVCounter()
@@ -531,13 +541,22 @@ u8 Video::GetHCounter()
 
 u8 Video::GetDataPort()
 {
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    u16 returned_address = m_VdpBufferAddress;
+#endif
     m_bFirstByteInSequence = true;
     u8 ret = m_VdpBuffer;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    m_VdpBufferAddress = m_VdpAddress;
+#endif
     m_VdpBuffer = m_pVdpVRAM[m_VdpAddress];
-#ifndef GS_DISABLE_DISASSEMBLER
+#if !defined(GS_DISABLE_DISASSEMBLER)
     m_pProcessor->CheckMemoryBreakpoints(Processor::GS_BREAKPOINT_TYPE_VRAM, m_VdpAddress, true);
 #endif
     m_VdpAddress = (m_VdpAddress + 1) & 0x3FFF;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    TraceVDPEvent(TRACE_VDP_DATA_READ, ret, ret, 0, 0, 0, 0, returned_address);
+#endif
     return ret;
 }
 
@@ -550,6 +569,8 @@ u8 Video::GetStatusFlags()
     if (IsSetBit(ret, 7))
         m_LineEvents.vint = true;
     m_pProcessor->RequestINT(false);
+    u8 status_before = ret & (m_bTMS9918 ? 0xFF : 0xE0);
+    TraceVDPEvent(TRACE_VDP_STATUS_READ, status_before, ret, 0, 0, status_before, m_VdpStatus);
     return ret;
 }
 
@@ -571,22 +592,29 @@ bool Video::IsSG1000Mode()
 void Video::WriteData(u8 data)
 {
     m_bFirstByteInSequence = true;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    m_VdpBufferAddress = m_VdpAddress;
+#endif
     m_VdpBuffer = data;
 
     if (m_VdpCode == 0x03)
     {
         u16 cram_addr = m_VdpAddress & ((m_bGameGear && !m_bGameGearSMSMode) ? 0x3F : 0x1F);
         m_pVdpCRAM[cram_addr] = data;
-#ifndef GS_DISABLE_DISASSEMBLER
+        if (m_bGameGear && !m_bGameGearSMSMode)
+            UpdateGGPalette(cram_addr >> 1);
+#if !defined(GS_DISABLE_DISASSEMBLER)
         m_pProcessor->CheckMemoryBreakpoints(Processor::GS_BREAKPOINT_TYPE_CRAM, cram_addr, false);
 #endif
+        TraceVDPEvent(TRACE_VDP_CRAM_WRITE, data, 0, 0, 0, 0, 0, cram_addr);
     }
     else
     {
         m_pVdpVRAM[m_VdpAddress] = data;
-#ifndef GS_DISABLE_DISASSEMBLER
+#if !defined(GS_DISABLE_DISASSEMBLER)
         m_pProcessor->CheckMemoryBreakpoints(Processor::GS_BREAKPOINT_TYPE_VRAM, m_VdpAddress, false);
 #endif
+        TraceVDPEvent(TRACE_VDP_DATA_WRITE, data, 0, 0, 0, 0, 0, m_VdpAddress);
     }
     m_VdpAddress = (m_VdpAddress + 1) & 0x3FFF;
 }
@@ -597,6 +625,9 @@ void Video::WriteControl(u8 data)
     {
         m_bFirstByteInSequence = false;
         m_VdpAddress = (m_VdpAddress & 0x3F00) | data;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+        TraceVDPEvent(TRACE_VDP_CONTROL, data, 0, 1);
+#endif
     }
     else
     {
@@ -604,13 +635,19 @@ void Video::WriteControl(u8 data)
 
         m_VdpCode = (data >> 6) & 0x03;
         m_VdpAddress = ((data & 0x3F) << 8) | (m_VdpAddress & 0x00FF);
+    #if !defined(GS_DISABLE_DISASSEMBLER)
+        TraceVDPEvent(TRACE_VDP_CONTROL, data, m_VdpCode, 2);
+    #endif
 
         switch (data & 0xC0)
         {
             case 0x00:
             {
+#if !defined(GS_DISABLE_DISASSEMBLER)
+                m_VdpBufferAddress = m_VdpAddress;
+#endif
                 m_VdpBuffer = m_pVdpVRAM[m_VdpAddress];
-#ifndef GS_DISABLE_DISASSEMBLER
+#if !defined(GS_DISABLE_DISASSEMBLER)
                 m_pProcessor->CheckMemoryBreakpoints(Processor::GS_BREAKPOINT_TYPE_VRAM, m_VdpAddress, true);
 #endif
                 m_VdpAddress = (m_VdpAddress + 1) & 0x3FFF;
@@ -620,6 +657,10 @@ void Video::WriteControl(u8 data)
             {
                 u8 reg = data & 0x0F;
                 u8 value = (m_VdpAddress & 0x00FF);
+#if !defined(GS_DISABLE_DISASSEMBLER)
+                bool previous_vint_irq = IsSetBit(m_VdpStatus, 7) && IsSetBit(m_VdpRegister[1], 5);
+                bool previous_hint_irq = !m_bTMS9918 && m_bLineInterruptPending && IsSetBit(m_VdpRegister[0], 4);
+#endif
 
                 if (reg == 1 && m_pCartridge->IsSG1000() && !m_pCartridge->IsSG1000II())
                 {
@@ -650,27 +691,35 @@ void Video::WriteControl(u8 data)
                 }
 
                 m_VdpRegister[reg] = value;
-#ifndef GS_DISABLE_DISASSEMBLER
+#if !defined(GS_DISABLE_DISASSEMBLER)
                 m_pProcessor->CheckMemoryBreakpoints(Processor::GS_BREAKPOINT_TYPE_VDP_REGISTER, reg, false);
-                if (m_pTraceLogger->IsEnabled(TRACE_VDP_WRITE))
-                {
-                    GS_Trace_Entry e = {};
-                    e.type = TRACE_VDP_WRITE;
-                    e.vdp_write.reg = reg;
-                    e.vdp_write.value = value;
-                    m_pTraceLogger->TraceLog(e);
-                }
+                TraceVDPEvent(TRACE_VDP_REG_WRITE, value, m_VdpRegister[reg], 0, reg);
 #endif
 
                 if (reg < 2)
                 {
+#if !defined(GS_DISABLE_DISASSEMBLER)
+                    int previous_mode = m_iTMS9918Mode;
+#endif
                     m_bExtendedMode224 = ((m_VdpRegister[0] & 0x06) == 0x06) && ((m_VdpRegister[1] & 0x18) == 0x10);
                     m_iTMS9918Mode = CalculateVideoMode();
                     m_bTMS9918 = !m_bGameGear && (m_iTMS9918Mode != 4);
+#if !defined(GS_DISABLE_DISASSEMBLER)
+                    if (previous_mode != m_iTMS9918Mode)
+                        TraceVDPEvent(TRACE_VDP_MODE_CHANGE, (u8)previous_mode, (u8)m_iTMS9918Mode);
+#endif
 
                     bool vint_irq = IsSetBit(m_VdpStatus, 7) && IsSetBit(m_VdpRegister[1], 5);
                     bool hint_irq = !m_bTMS9918 && m_bLineInterruptPending && IsSetBit(m_VdpRegister[0], 4);
                     m_pProcessor->RequestINT(vint_irq || hint_irq);
+#if !defined(GS_DISABLE_DISASSEMBLER)
+                    if ((previous_vint_irq || previous_hint_irq) != (vint_irq || hint_irq))
+                    {
+                        u8 event = (vint_irq || (!hint_irq && previous_vint_irq)) ?
+                            TRACE_VDP_VINT_REQUEST : TRACE_VDP_HINT_REQUEST;
+                        TraceVDPEvent(event, 0, (vint_irq || hint_irq) ? 1 : 0);
+                    }
+#endif
                 }
                 else if (reg > 10)
                 {
@@ -684,6 +733,9 @@ void Video::WriteControl(u8 data)
 
 void Video::ScanLine(int line)
 {
+    if (m_bGameGear && !m_bGameGearSMSMode && m_bGGPaletteExternalAccess)
+        RebuildGGPalette();
+
     int max_height = m_bExtendedMode224 ? 224 : 192;
     int next_line = line + 1;
     next_line %= m_iLinesPerFrame;
@@ -719,7 +771,7 @@ void Video::ScanLine(int line)
             if (m_bTMS9918)
                 color = m_VdpRegister[7] & 0x0F;
             else
-                color = ColorFromPalette((m_VdpRegister[7] & 0x0F) + 16);
+                color = CachedColorFromPalette((m_VdpRegister[7] & 0x0F) + 16);
 
             int line_width = line * m_iScreenWidth;
 
@@ -736,7 +788,8 @@ void Video::ScanLine(int line)
 void Video::RenderBackgroundSMSGG(int line)
 {
     int y_offset = m_bExtendedMode224 ? GS_RESOLUTION_GG_Y_OFFSET_EXTENDED : GS_RESOLUTION_GG_Y_OFFSET;
-    int scy_adjust = (m_bGameGear && !m_bGameGearSMSMode) ? y_offset : 0;
+    bool game_gear = m_bGameGear && !m_bGameGearSMSMode;
+    int scy_adjust = game_gear ? y_offset : 0;
     int scy = line;
     int line_width_info = line * (m_iScreenWidth - m_iHideLeftBarOffset);
     int line_width_screen = (line - scy_adjust) * (m_iScreenWidth - m_iHideLeftBarOffset);
@@ -759,83 +812,105 @@ void Video::RenderBackgroundSMSGG(int line)
     int tile_y = map_y >> 3;
     int tile_y_offset = map_y & 7;
 
-    int palette_color = 0;
-
-    int scx_begin = (m_bGameGear && !m_bGameGearSMSMode) ? GS_RESOLUTION_GG_X_OFFSET : m_iHideLeftBarOffset;
+    int scx_begin = game_gear ? GS_RESOLUTION_GG_X_OFFSET : m_iHideLeftBarOffset;
     int scx_end = scx_begin + m_iScreenWidth - m_iHideLeftBarOffset;
-
     int max_height = m_bExtendedMode224 ? 224 : 192;
+    bool mask_left = IsSetBit(m_VdpRegister[0], 5);
+    bool lock_right = IsSetBit(m_VdpRegister[0], 7);
+    bool render_line = !game_gear || ((line >= y_offset) && (line < (y_offset + GS_RESOLUTION_GG_HEIGHT)));
 
-    for (int scx = scx_begin; scx < scx_end; scx++)
+    if (line >= max_height)
+    {
+        for (int scx = scx_begin; scx < scx_end; scx++)
+            m_pInfoBuffer[line_width_info + scx - scx_begin] = 0;
+        return;
+    }
+
+    int scx = scx_begin;
+    while (scx < scx_end)
     {
         int scx_diff = scx - scx_begin;
         int pixel_screen = line_width_screen + scx_diff;
         int pixel_info = line_width_info + scx_diff;
 
-        if (line < max_height)
+        if (mask_left && (scx < 8))
         {
-            if (IsSetBit(m_VdpRegister[0], 5) && scx < 8)
+            int span = MIN(8 - scx, scx_end - scx);
+            int palette_color = (m_VdpRegister[7] & 0x0F) + 16;
+
+            for (int pixel = 0; pixel < span; pixel++)
             {
-                palette_color = (m_VdpRegister[7] & 0x0F) + 16;
-            }
-            else
-            {
-                if (IsSetBit(m_VdpRegister[0], 7) && (scx >= 192))
-                {
-                    map_y = scy;
-                    tile_y = map_y >> 3;
-                    tile_y_offset = map_y & 7;
-                }
-                u8 map_x = scx - origin_x;
-
-                int tile_x = map_x >> 3;
-                int tile_x_offset = map_x & 7;
-
-                int tile_addr = map_address + (((tile_y << 5) + tile_x) << 1);
-                int tile_index = m_pVdpVRAM[tile_addr];
-                int tile_info = m_pVdpVRAM[tile_addr + 1];
-                if (IsSetBit(tile_info, 0))
-                    tile_index = (tile_index | 0x0100) & 0x1FF;
-
-                bool hflip = IsSetBit(tile_info, 1);
-                bool vflip = IsSetBit(tile_info, 2);
-                int palette_offset = IsSetBit(tile_info, 3) ? 16 : 0;
-                bool priority = IsSetBit(tile_info, 4);
-
-                int tile_data_addr = tile_index << 5;
-                tile_data_addr += ((vflip ? 7 - tile_y_offset : tile_y_offset) << 2);
-
-                int tile_pixel_x = 7 - tile_x_offset;
-                if (hflip)
-                    tile_pixel_x = tile_x_offset;
-
-                palette_color = ((m_pVdpVRAM[tile_data_addr] >> tile_pixel_x) & 0x01) +
-                        (((m_pVdpVRAM[tile_data_addr + 1] >> tile_pixel_x) & 0x01) << 1) +
-                        (((m_pVdpVRAM[tile_data_addr + 2] >> tile_pixel_x) & 0x01) << 2) +
-                        (((m_pVdpVRAM[tile_data_addr + 3] >> tile_pixel_x) & 0x01) << 3) +
-                        palette_offset;
-
-                bool final_priority = priority && ((palette_color - palette_offset) != 0);
-
-                if ((m_pInfoBuffer[pixel_info] & 0x01) && !final_priority)
-                {
-                    m_pInfoBuffer[pixel_info] = 0;
-                    continue;
-                }
+                if (render_line)
+                    m_pFrameBuffer[pixel_screen] = CachedColorFromPalette(palette_color);
+                m_pInfoBuffer[pixel_info] = 0;
+                pixel_screen++;
+                pixel_info++;
             }
 
-            if (m_bGameGear && !m_bGameGearSMSMode)
-            {
-                if ((line >= y_offset) && (line < (y_offset + GS_RESOLUTION_GG_HEIGHT)))
-                    m_pFrameBuffer[pixel_screen] = ColorFromPalette(palette_color);
-            }
-            else
-            {
-                m_pFrameBuffer[pixel_screen] = ColorFromPalette(palette_color);
-            }
+            scx += span;
+            continue;
         }
 
-        m_pInfoBuffer[pixel_info] = 0;
+        int current_tile_y = tile_y;
+        int current_tile_y_offset = tile_y_offset;
+
+        if (lock_right && (scx >= 192))
+        {
+            current_tile_y = scy >> 3;
+            current_tile_y_offset = scy & 7;
+        }
+
+        u8 map_x = scx - origin_x;
+        int tile_x = map_x >> 3;
+        int tile_x_offset = map_x & 7;
+        int span = 8 - tile_x_offset;
+
+        if (lock_right && (scx < 192) && ((scx + span) > 192))
+            span = 192 - scx;
+        if ((scx + span) > scx_end)
+            span = scx_end - scx;
+
+        int tile_addr = map_address + (((current_tile_y << 5) + tile_x) << 1);
+        int tile_index = m_pVdpVRAM[tile_addr];
+        int tile_info = m_pVdpVRAM[tile_addr + 1];
+        if (IsSetBit(tile_info, 0))
+            tile_index = (tile_index | 0x0100) & 0x1FF;
+
+        bool hflip = IsSetBit(tile_info, 1);
+        bool vflip = IsSetBit(tile_info, 2);
+        int palette_offset = IsSetBit(tile_info, 3) ? 16 : 0;
+        bool priority = IsSetBit(tile_info, 4);
+
+        int tile_data_addr = tile_index << 5;
+        tile_data_addr += ((vflip ? 7 - current_tile_y_offset : current_tile_y_offset) << 2);
+
+        u8 pattern_0 = m_pVdpVRAM[tile_data_addr];
+        u8 pattern_1 = m_pVdpVRAM[tile_data_addr + 1];
+        u8 pattern_2 = m_pVdpVRAM[tile_data_addr + 2];
+        u8 pattern_3 = m_pVdpVRAM[tile_data_addr + 3];
+        int tile_pixel_x = hflip ? tile_x_offset : 7 - tile_x_offset;
+        int tile_pixel_step = hflip ? 1 : -1;
+
+        for (int pixel = 0; pixel < span; pixel++)
+        {
+            int palette_color = ((pattern_0 >> tile_pixel_x) & 0x01) +
+                    (((pattern_1 >> tile_pixel_x) & 0x01) << 1) +
+                    (((pattern_2 >> tile_pixel_x) & 0x01) << 2) +
+                    (((pattern_3 >> tile_pixel_x) & 0x01) << 3) +
+                    palette_offset;
+            bool final_priority = priority && ((palette_color - palette_offset) != 0);
+
+            if ((((m_pInfoBuffer[pixel_info] & 0x01) == 0) || final_priority) && render_line)
+                m_pFrameBuffer[pixel_screen] = CachedColorFromPalette(palette_color);
+
+            m_pInfoBuffer[pixel_info] = 0;
+
+            pixel_screen++;
+            pixel_info++;
+            tile_pixel_x += tile_pixel_step;
+        }
+
+        scx += span;
     }
 }
 
@@ -978,12 +1053,12 @@ void Video::RenderSpritesSMSGG(int line)
             if (m_bGameGear && !m_bGameGearSMSMode)
             {
                 if ((line >= y_offset) && (line < (y_offset + GS_RESOLUTION_GG_HEIGHT)))
-                    m_pFrameBuffer[pixel_screen] = ColorFromPalette(palette_color);
+                    m_pFrameBuffer[pixel_screen] = CachedColorFromPalette(palette_color);
             }
             else
             {
                 if (line < max_height)
-                    m_pFrameBuffer[pixel_screen] = ColorFromPalette(palette_color);
+                    m_pFrameBuffer[pixel_screen] = CachedColorFromPalette(palette_color);
             }
 
             if ((m_pInfoBuffer[pixel_info] & 0x01) != 0)
@@ -1171,8 +1246,14 @@ void Video::RenderSpritesTMS9918(int line)
         sprite_count++;
         if (!IsSetBit(m_VdpStatus, 6) && (sprite_count > 4))
         {
+#if !defined(GS_DISABLE_DISASSEMBLER)
+            u8 status_before = m_VdpStatus;
+#endif
             m_VdpStatus = SetBit(m_VdpStatus, 6);
             m_VdpStatus = (m_VdpStatus & 0xE0) | sprite;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+            TraceVDPEvent(TRACE_VDP_SPRITE_OVERFLOW, (u8)sprite, 1, (u16)sprite, 0, status_before, m_VdpStatus);
+#endif
         }
 
         int sprite_color = m_pVdpVRAM[sprite_attribute_offset + 3] & 0x0F;
@@ -1220,7 +1301,15 @@ void Video::RenderSpritesTMS9918(int line)
 
                 if (IsSetBit(m_pInfoBuffer[pixel], 1))
                 {
-                     m_VdpStatus = SetBit(m_VdpStatus, 5);
+#if !defined(GS_DISABLE_DISASSEMBLER)
+                    bool collision_set = IsSetBit(m_VdpStatus, 5);
+                    u8 status_before = m_VdpStatus;
+#endif
+                    m_VdpStatus = SetBit(m_VdpStatus, 5);
+#if !defined(GS_DISABLE_DISASSEMBLER)
+                    if (!collision_set)
+                        TraceVDPEvent(TRACE_VDP_SPRITE_COLLISION, (u8)sprite_pixel_x, 1, (u16)sprite_pixel_x, 0, status_before, m_VdpStatus);
+#endif
                 }
                 else
                 {
@@ -1242,14 +1331,12 @@ void Video::Render32bit(u16* srcFrameBuffer, u8* dstFrameBuffer, GS_Color_Format
     int overscan_total_width = GS_RESOLUTION_MAX_WIDTH - m_iHideLeftBarOffset;
     int overscan_total_height = 0;
     bool overscan_enabled = false;
-    int overscan_color = m_bTMS9918 ? m_VdpRegister[7] & 0x0F : ColorFromPalette((m_VdpRegister[7] & 0x0F) + 16);
+    int overscan_color = m_bTMS9918 ? m_VdpRegister[7] & 0x0F : CachedColorFromPalette((m_VdpRegister[7] & 0x0F) + 16);
     int buffer_size = size * 4;    
     bool use_gg_palette = m_bGameGear && !m_bGameGearSMSMode;
-    int shift_g = use_gg_palette ? 4 : 2;
-    int shift_b = use_gg_palette ? 8 : 4;
-    int mask = use_gg_palette ? 0x0F : 0x03;
     bool bgr = (pixelFormat == GS_PIXEL_BGRA8888);
-    const u8* lut = use_gg_palette ? k4bitTo8bit : k2bitTo8bit;
+    int color_mask = use_gg_palette ? 0x0FFF : 0x003F;
+    const u32* output_palette = use_gg_palette ? m_GGOutputPalette32[bgr ? 1 : 0] : m_SMSOutputPalette32[bgr ? 1 : 0];
     const u8* sg1000_palette = m_pCartridge->IsSG1000II() ? kSG1000_palette_888_sg1000ii : (m_pCartridge->IsSG1000() ? kSG1000_palette_888_normal : kSG1000_palette_888_sms);
 
     if (m_bGameGear)
@@ -1312,10 +1399,8 @@ void Video::Render32bit(u16* srcFrameBuffer, u8* dstFrameBuffer, GS_Color_Format
         }
         else
         {
-            dstFrameBuffer[j + 0] = lut[bgr ? (src_color >> shift_b) & mask : src_color & mask];
-            dstFrameBuffer[j + 1] = lut[(src_color >> shift_g) & mask];
-            dstFrameBuffer[j + 2] = lut[bgr ? src_color & mask : (src_color >> shift_b) & mask];
-            dstFrameBuffer[j + 3] = 0xFF;
+            u32 output_color = output_palette[src_color & color_mask];
+            memcpy(&dstFrameBuffer[j], &output_color, sizeof(output_color));
         }
     }
 }
@@ -1331,17 +1416,14 @@ void Video::Render16bit(u16* srcFrameBuffer, u8* dstFrameBuffer, GS_Color_Format
     int overscan_total_width = GS_RESOLUTION_MAX_WIDTH - m_iHideLeftBarOffset;
     int overscan_total_height = 0;
     bool overscan_enabled = false;
-    int overscan_color = m_bTMS9918 ? m_VdpRegister[7] & 0x0F : ColorFromPalette((m_VdpRegister[7] & 0x0F) + 16);
+    int overscan_color = m_bTMS9918 ? m_VdpRegister[7] & 0x0F : CachedColorFromPalette((m_VdpRegister[7] & 0x0F) + 16);
     int buffer_size = size * 2;    
     bool use_gg_palette = m_bGameGear && !m_bGameGearSMSMode;
-    int shift_g = use_gg_palette ? 4 : 2;
-    int shift_b = use_gg_palette ? 8 : 4;
-    int mask = use_gg_palette ? 0x0F : 0x03;
     bool bgr = ((pixelFormat == GS_PIXEL_BGR555) || (pixelFormat == GS_PIXEL_BGR565));
     bool green_6bit = (pixelFormat == GS_PIXEL_RGB565) || (pixelFormat == GS_PIXEL_BGR565);
-    const u8* lut = use_gg_palette ? k4bitTo5bit : k2bitTo5bit;
-    const u8* lut_g = use_gg_palette ? (green_6bit ? k4bitTo6bit : k4bitTo5bit) : (green_6bit ? k2bitTo6bit : k2bitTo5bit);
-    int shift = green_6bit ? 11 : 10;
+    int format = (bgr ? 2 : 0) + (green_6bit ? 0 : 1);
+    int color_mask = use_gg_palette ? 0x0FFF : 0x003F;
+    const u16* output_palette = use_gg_palette ? m_GGOutputPalette16[format] : m_SMSOutputPalette16[format];
     const u16* pal;
 
     if (m_pCartridge->IsSG1000II())
@@ -1423,13 +1505,8 @@ void Video::Render16bit(u16* srcFrameBuffer, u8* dstFrameBuffer, GS_Color_Format
         }
         else
         {
-            u8 red, green, blue;
-
-            red = bgr ? (src_color >> shift_b) & mask : src_color & mask;
-            green = (src_color >> shift_g) & mask;
-            blue = bgr ? src_color & mask : (src_color >> shift_b) & mask;
-
-            *(u16*)(&dstFrameBuffer[j]) = (lut[red] << shift) | (lut_g[green] << 5) | lut[blue];
+            u16 output_color = output_palette[src_color & color_mask];
+            memcpy(&dstFrameBuffer[j], &output_color, sizeof(output_color));
         }
     }
 }
@@ -1599,6 +1676,55 @@ void Video::InitPalettes(const u8* src, u16* dest_565_rgb, u16* dest_555_rgb, u1
     }
 }
 
+void Video::InitOutputPalettes()
+{
+    for (int color = 0; color < 64; color++)
+    {
+        u8 red = color & 0x03;
+        u8 green = (color >> 2) & 0x03;
+        u8 blue = (color >> 4) & 0x03;
+        u8* rgba = (u8*)&m_SMSOutputPalette32[0][color];
+        u8* bgra = (u8*)&m_SMSOutputPalette32[1][color];
+
+        rgba[0] = k2bitTo8bit[red];
+        rgba[1] = k2bitTo8bit[green];
+        rgba[2] = k2bitTo8bit[blue];
+        rgba[3] = 0xFF;
+        bgra[0] = k2bitTo8bit[blue];
+        bgra[1] = k2bitTo8bit[green];
+        bgra[2] = k2bitTo8bit[red];
+        bgra[3] = 0xFF;
+
+        m_SMSOutputPalette16[0][color] = (k2bitTo5bit[red] << 11) | (k2bitTo6bit[green] << 5) | k2bitTo5bit[blue];
+        m_SMSOutputPalette16[1][color] = (k2bitTo5bit[red] << 10) | (k2bitTo5bit[green] << 5) | k2bitTo5bit[blue];
+        m_SMSOutputPalette16[2][color] = (k2bitTo5bit[blue] << 11) | (k2bitTo6bit[green] << 5) | k2bitTo5bit[red];
+        m_SMSOutputPalette16[3][color] = (k2bitTo5bit[blue] << 10) | (k2bitTo5bit[green] << 5) | k2bitTo5bit[red];
+    }
+
+    for (int color = 0; color < 4096; color++)
+    {
+        u8 red = color & 0x0F;
+        u8 green = (color >> 4) & 0x0F;
+        u8 blue = (color >> 8) & 0x0F;
+        u8* rgba = (u8*)&m_GGOutputPalette32[0][color];
+        u8* bgra = (u8*)&m_GGOutputPalette32[1][color];
+
+        rgba[0] = k4bitTo8bit[red];
+        rgba[1] = k4bitTo8bit[green];
+        rgba[2] = k4bitTo8bit[blue];
+        rgba[3] = 0xFF;
+        bgra[0] = k4bitTo8bit[blue];
+        bgra[1] = k4bitTo8bit[green];
+        bgra[2] = k4bitTo8bit[red];
+        bgra[3] = 0xFF;
+
+        m_GGOutputPalette16[0][color] = (k4bitTo5bit[red] << 11) | (k4bitTo6bit[green] << 5) | k4bitTo5bit[blue];
+        m_GGOutputPalette16[1][color] = (k4bitTo5bit[red] << 10) | (k4bitTo5bit[green] << 5) | k4bitTo5bit[blue];
+        m_GGOutputPalette16[2][color] = (k4bitTo5bit[blue] << 11) | (k4bitTo6bit[green] << 5) | k4bitTo5bit[red];
+        m_GGOutputPalette16[3][color] = (k4bitTo5bit[blue] << 10) | (k4bitTo5bit[green] << 5) | k4bitTo5bit[red];
+    }
+}
+
 int Video::CalculateVideoMode()
 {
     if (IsSetBit(m_VdpRegister[0], 2))
@@ -1735,4 +1861,9 @@ void Video::LoadState(std::istream& stream, int version)
         m_bSpriteCollisionRequest = false;
         m_iSpriteCollisionX = 0;
     }
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    m_VdpBufferAddress = (m_VdpAddress - 1) & 0x3FFF;
+#endif
+
+    RebuildGGPalette();
 }

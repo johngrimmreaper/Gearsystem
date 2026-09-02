@@ -59,7 +59,7 @@ public:
         u16 src;
         u16 dest;
         u16 back;
-        u8 bank;
+        u16 bank;
     };
 
     struct ProcessorState
@@ -129,7 +129,15 @@ public:
     void SetTraceLogger(TraceLogger* pTraceLogger);
 
 private:
-    typedef void (Processor::*OPCptr) (void);
+    typedef void (Processor::*OPCmemberptr) (void);
+    typedef void (*OPCptr) (Processor*);
+
+    template<OPCmemberptr Opcode>
+    static void OPCodeThunk(Processor* cpu)
+    {
+        (cpu->*Opcode)();
+    }
+
     OPCptr m_OPCodes[256];
     OPCptr m_OPCodesCB[256];
     OPCptr m_OPCodesED[256];
@@ -210,11 +218,15 @@ private:
     void StackPop(SixteenBitRegister* reg);
     void SetInterruptMode(int mode);
     void IncreaseR();
+    INLINE void TraceInstructionEvent(u16 pc);
+    INLINE void TraceIRQEvent(u16 pc, u16 vector, u8 irq_type);
+    void LogInstructionEvent(u16 pc);
+    void LogIRQEvent(u16 pc, u16 vector, u8 irq_type);
     void UpdateProActionReplay();
     void InvalidOPCode();
     void UndocumentedOPCode();
     void CheckBreakpoints();
-    void PushCallStack(u16 src, u16 dest, u16 back, u8 bank);
+    void PushCallStack(u16 src, u16 dest, u16 back, u16 bank);
     void PopCallStack();
     void FormatDisassemblerDataBytes(char* text, size_t text_size, const u8* bytes, int size);
     void SetDisassemblerOperandText(GS_Disassembler_Record* record, const char* text);
@@ -285,7 +297,7 @@ private:
     void OPCodes_SET_HL(int bit);
     void OPCodes_RES(u8* reg, int bit);
     void OPCodes_RES_HL(int bit);
-    void InitOPCodeFunctors();
+    void InitOPCodeTable();
 
     void OPCode0x00();
     void OPCode0x01();
@@ -917,6 +929,7 @@ const bool kZ80ParityTable[256] = {
 };
 
 #include "Memory.h"
+#include "TraceLogger.h"
 #include "Processor_inline.h"
 
 #endif	/* PROCESSOR_H */

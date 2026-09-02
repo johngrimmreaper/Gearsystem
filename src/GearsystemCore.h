@@ -23,6 +23,7 @@
 #include "definitions.h"
 #include "Cartridge.h"
 #include "Video.h"
+#include "geartogear.h"
 
 class Memory;
 class Processor;
@@ -79,9 +80,9 @@ public:
     GearsystemCore();
     ~GearsystemCore();
     void Init(GS_Color_Format pixelFormat = GS_PIXEL_RGBA8888);
-    bool RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSampleCount, GS_Debug_Run* debug = NULL);
+    bool RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSampleCount, GS_Debug_Run* debug = NULL, bool render = true);
     void RenderFrameBuffer(u8* finalFrameBuffer);
-    bool LoadROM(const char* szFilePath, Cartridge::ForceConfiguration* config = NULL);
+    bool LoadROM(const char* szFilePath, Cartridge::ForceConfiguration* config = NULL, bool softpatching = false);
     bool LoadROMFromBuffer(const u8* buffer, int size, Cartridge::ForceConfiguration* config = NULL, const char* szFilePath = NULL);
     void SaveMemoryDump();
     void SaveDisassembledROM();
@@ -95,6 +96,8 @@ public:
     void EnablePhaserCrosshair(bool enable, Video::LightPhaserCrosshairShape shape, Video::LightPhaserCrosshairColor color);
     void SetPaddle(float x);
     void EnablePaddle(bool enable);
+    void MoveSportsPad(GS_Joypads joypad, float x, float y);
+    void EnableSportsPad(GS_Joypads joypad, bool enable);
     void Pause(bool paused);
     bool IsPaused();
     void ResetROM(Cartridge::ForceConfiguration* config = NULL);
@@ -121,6 +124,19 @@ public:
     Input* GetInput();
     void SetGlassesConfig(GlassesConfig config);
     u64 GetMasterClockCycles();
+    void SetMasterClockCycles(u64 cycles);
+    void SetGearToGearCallbacks(
+        GS_GearToGear_Publish_Callback publish_callback,
+        GS_GearToGear_Sample_Callback sample_callback,
+        GS_GearToGear_Poll_Callback poll_callback,
+        GS_GearToGear_Fence_Callback fence_callback,
+        GS_GearToGear_Sync_Callback sync_callback,
+        void* user_data);
+    void SetGearToGearTransportActive(bool active, u64 cycle);
+    void SetGearToGearCableConnected(bool connected, u64 cycle);
+    bool IsNativeGameGearMode() const;
+    u64 GetGearToGearCycles() const;
+    GameGearIOPorts* GetGameGearIOPorts();
     TraceLogger* GetTraceLogger();
 
 private:
@@ -170,6 +186,7 @@ private:
     GS_Color_Format m_pixelFormat;
     GlassesConfig m_GlassesConfig;
     u64 m_master_clock_cycles;
+    u64 m_geartogear_cycles;
     TraceLogger* m_trace_logger;
     u8* m_pFrameBuffer;
 };

@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/github/license/drhelius/Gearsystem)](https://github.com/drhelius/Gearsystem/blob/master/LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/drhelius)](https://x.com/drhelius)
 
-Gearsystem is a very accurate, cross-platform Sega Master System / Game Gear / SG-1000 emulator written in C++ that runs on Windows, macOS, Linux, BSD and RetroArch, with an embedded MCP server for debugging and tooling.
+Gearsystem is a very accurate, cross-platform Sega Master System / Game Gear / SG-1000 emulator written in C++ that runs on Windows, macOS, Linux, BSD and RetroArch, with an embedded MCP server for AI debugging and development.
 
 This is an open source project with its ongoing development made possible thanks to the support by these awesome [backers](backers.md). If you find it useful, please consider [sponsoring](https://github.com/sponsors/drhelius).
 
@@ -30,11 +30,11 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>Desktop x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-desktop-windows-x64.zip">Gearsystem-3.9.15-desktop-windows-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-windows-x64.zip">Gearsystem-3.9.18-desktop-windows-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-desktop-windows-arm64.zip">Gearsystem-3.9.15-desktop-windows-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-windows-arm64.zip">Gearsystem-3.9.18-desktop-windows-arm64.zip</a></td>
     </tr>
     <tr>
       <td rowspan="3"><strong>macOS</strong></td>
@@ -43,11 +43,11 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     </tr>
     <tr>
       <td>Desktop Apple Silicon</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-desktop-macos-arm64.zip">Gearsystem-3.9.15-desktop-macos-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-macos-arm64.zip">Gearsystem-3.9.18-desktop-macos-arm64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Intel</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-desktop-macos-intel.zip">Gearsystem-3.9.15-desktop-macos-intel.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-macos-intel.zip">Gearsystem-3.9.18-desktop-macos-intel.zip</a></td>
     </tr>
     <tr>
       <td rowspan="5"><strong>Linux</strong></td>
@@ -60,15 +60,15 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     </tr>
     <tr>
       <td>Desktop Ubuntu 24.04 x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-desktop-ubuntu24.04-x64.zip">Gearsystem-3.9.15-desktop-ubuntu24.04-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-ubuntu24.04-x64.zip">Gearsystem-3.9.18-desktop-ubuntu24.04-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 22.04 x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-desktop-ubuntu22.04-x64.zip">Gearsystem-3.9.15-desktop-ubuntu22.04-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-ubuntu22.04-x64.zip">Gearsystem-3.9.18-desktop-ubuntu22.04-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 24.04 ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-desktop-ubuntu24.04-arm64.zip">Gearsystem-3.9.15-desktop-ubuntu24.04-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-ubuntu24.04-arm64.zip">Gearsystem-3.9.18-desktop-ubuntu24.04-arm64.zip</a></td>
     </tr>
     <tr>
       <td><strong>MCPB</strong></td>
@@ -107,6 +107,7 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Supported cartridges: ROM, ROM + RAM, SEGA, Codemasters, Korean, MSX + Nemesis, Janggun, SG-1000, and many Korean multi-carts.
 - Automatic region detection: NTSC-JAP, NTSC-USA, PAL-EUR.
 - Support for YM2413 (OPLL) FM sound chip.
+- Game Gear Gear-to-Gear cable support for two local desktop processes, including serial and parallel communication.
 - Light Phaser and Paddle Control support.
 - Internal database for ROM detection.
 - Battery powered RAM save support.
@@ -132,6 +133,8 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - **Overscan**: For a precise representation of the original image, select **Overscan** `Top+Bottom` and **Aspect Ratio** `Standard (4:3 DAR)` in the **Video** menu. Game Gear will ignore any overscan settings.
 - **Mouse Cursor**: Automatically hides when hovering over the main output window or when Main Menu is disabled.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
+- **Gear-to-Gear**:
+Open `Gear-to-Gear` in two desktop instances, select the same session, and connect both, or start each process with `--geartogear-session N`. Independent instances should use separate application copies or `--portable` data directories so configuration, saves, and single-instance handling do not conflict.
 
 ### Debugging Features
 - **Docking Windows**: In debug mode, you can dock windows together by pressing SHIFT and dragging a window onto another.
@@ -144,21 +147,23 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 gearsystem [options] [rom_file] [symbol_file]
 
 Arguments:
-  [rom_file]               ROM file: accepts ROMs (.sms, .gg, .sg, .mv) or ZIP (.zip)
-  [symbol_file]            Optional symbol file for debugging
+  [rom_file]                  ROM file: accepts ROMs (.sms, .gg, .sg, .mv) or ZIP (.zip)
+  [symbol_file]               Optional symbol file for debugging
 
 Options:
-  -f, --fullscreen         Start in fullscreen mode
-  -w, --windowed           Start in windowed mode with menu visible
-      --mcp-stdio          Auto-start MCP server with stdio transport
-      --mcp-http           Auto-start MCP server with HTTP transport
-      --mcp-router         Enable compact MCP tool routing
-      --mcp-http-address A HTTP bind address (default: 127.0.0.1)
-      --mcp-http-port N    HTTP port for MCP server (default: 7777)
-      --headless           Run without GUI (requires --mcp-stdio or --mcp-http)
-        --portable           Store configuration and user data beside the application
-  -v, --version            Display version information
-  -h, --help               Display this help message
+  -f, --fullscreen            Start in fullscreen mode
+  -w, --windowed              Start in windowed mode with menu visible
+      --mcp-stdio             Auto-start MCP server with stdio transport
+      --mcp-http              Auto-start MCP server with HTTP transport
+      --mcp-router            Enable compact MCP tool routing
+      --mcp-http-address A    HTTP bind address (default: 127.0.0.1)
+      --mcp-http-port N       HTTP port for MCP server (default: 7777)
+      --headless              Run without GUI (requires MCP or Gear-to-Gear)
+      --geartogear-session N  Connect to Gear-to-Gear session 1-255
+      --geartogear-stall-us N Override barrier stall threshold (0=default)
+      --portable              Store configuration and user data beside the application
+  -v, --version               Display version information
+  -h, --help                  Display this help message
 ```
 
 ### MCP Server

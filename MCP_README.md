@@ -18,29 +18,29 @@ This server provides tools for game development, rom hacking, reverse engineerin
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-mcpb-windows-x64.mcpb">Gearsystem-3.9.15-mcpb-windows-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-windows-x64.mcpb">Gearsystem-3.9.18-mcpb-windows-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-mcpb-windows-arm64.mcpb">Gearsystem-3.9.15-mcpb-windows-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-windows-arm64.mcpb">Gearsystem-3.9.18-mcpb-windows-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>macOS</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-mcpb-macos-x64.mcpb">Gearsystem-3.9.15-mcpb-macos-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-macos-x64.mcpb">Gearsystem-3.9.18-mcpb-macos-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-mcpb-macos-arm64.mcpb">Gearsystem-3.9.15-mcpb-macos-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-macos-arm64.mcpb">Gearsystem-3.9.18-mcpb-macos-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>Linux</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-mcpb-linux-x64.mcpb">Gearsystem-3.9.15-mcpb-linux-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-linux-x64.mcpb">Gearsystem-3.9.18-mcpb-linux-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.15/Gearsystem-3.9.15-mcpb-linux-arm64.mcpb">Gearsystem-3.9.15-mcpb-linux-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-linux-arm64.mcpb">Gearsystem-3.9.18-mcpb-linux-arm64.mcpb</a></td>
     </tr>
   </tbody>
 </table>
@@ -50,13 +50,13 @@ This server provides tools for game development, rom hacking, reverse engineerin
 - **Full Debugger Access**: CPU registers, memory inspection, breakpoints, and execution control
 - **Multiple Memory Areas**: Access RAM, VRAM, CRAM, ROM banks, external RAM, BIOS, and more
 - **Disassembly**: View disassembled Z80 code around PC or any address
-- **Hardware Inspection**: Z80 CPU, VDP, PSG, YM2413 FM synthesis
+- **Hardware Inspection**: Z80 CPU, VDP, PSG, YM2413 FM synthesis, and Game Gear link cable
 - **Sprite Viewer**: List and inspect all 64 sprites with images
 - **Symbol Support**: Add, remove, list, and look up debug symbols
 - **Input State**: Inspect effective pressed buttons and pending tap releases
 - **Bookmarks**: Memory and disassembler bookmarks for navigation
 - **Call Stack**: View function call hierarchy
-- **Trace Logger**: CPU instruction trace with interleaved hardware events (VDP, PSG, YM2413, I/O, bank switching)
+- **Trace Logger**: CPU instructions, VDP, input, I/O, PSG, YM2413, mapper, EEPROM, and flash events
 - **Rewind**: Time-travel debugging with snapshot status and seek tools
 - **Screenshot Capture**: Get current frame as PNG image
 - **GUI Integration**: MCP server runs alongside the emulator GUI, sharing the same state
@@ -339,7 +339,7 @@ The server exposes tools organized in the following categories:
 - `debug_step_into` - Step one Z80 instruction
 - `debug_step_over` - Step over subroutine calls
 - `debug_step_out` - Step out of current subroutine
-- `debug_step_frame` - Step one or more frames
+- `debug_step_frame` - Step one or more frames. Optional `frames` is 1-1000 (default 1). Optional `mode` is `async` (default, returns after scheduling) or `sync` (returns after all requested frames complete at VBlank). Use `mode: "sync"` when issuing dependent tool calls.
 - `debug_run_to_cursor` - Continue execution until reaching specified address
 - `debug_reset` - Reset emulation
 - `debug_get_status` - Get debug status (paused, at_breakpoint, pc address)
@@ -363,7 +363,7 @@ The server exposes tools organized in the following categories:
 - `list_memory_watches` - List all watches in memory area
 - `memory_search_capture` - Capture memory snapshot for search comparison
 - `memory_search` - Search memory with operators (<, >, ==, !=, <=, >=), compare types (previous, value, address), and data types (hex, signed, unsigned)
-- `memory_find_bytes` - Find byte sequences in memory
+- `memory_find` - Find hex byte sequences (`hex_bytes`) or text (`text`, optional `case_sensitive`) in memory
 
 ### Disassembly & Debugging
 - `get_disassembly` - Get Z80 disassembly for specified address range
@@ -376,8 +376,10 @@ The server exposes tools organized in the following categories:
 - `remove_disassembler_bookmark` - Remove disassembler bookmark
 - `list_disassembler_bookmarks` - List all disassembler bookmarks
 - `get_call_stack` - View function call hierarchy
-- `get_trace_log` - Read trace logger entries (CPU + hardware events). Start the trace logger from the debugger window first
-- `set_trace_log` - Start or stop trace logging with event filters
+- `get_trace_log` - Read retained entries using absolute sequence pagination. Results include `total_entries`, monotonic `total_logged`, `oldest_sequence`, actual `start`, `next_sequence`, `count`, `overrun`, and formatted `lines`. Omit `start` for the latest 100 retained entries, or use a negative value to start that many entries from the retained tail; expired starts clamp to the oldest retained entry with `overrun=true`
+- `set_trace_log` - Start, stop, or reconfigure shared GUI/MCP capture. `output` is `memory` or `disk`; `memory_size` is `100K`, `500K`, `1M`, `2M`, or `5M`; `disk_size` is `10MB`, `50MB`, `100MB`, `250MB`, `500MB`, `1GB`, or `unbounded`; `output_path` is a directory. Omitting `filters` selects CPU instructions and interrupts
+
+Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `vdp.interrupts`, `vdp.status`, `vdp.sprites`, `vdp.state`, `vdp.data`, `vdp.cram`, `input.reads`, `input.changes`, `io.control`, `io.counters`, `io.gamegear`, `geartogear.cable`, `geartogear.transfers`, `geartogear.interrupts`, `geartogear.wire`, `psg.tone`, `psg.volume`, `psg.noise`, `psg.stereo`, `ym2413.registers`, `ym2413.mixer`, `mapper.rom`, `mapper.ram`, `mapper.control`, `mapper.eeprom`, and `mapper.flash`. Trace cycle values are Z80 T-states, and a `RESET` marker denotes a reset clock discontinuity while absolute sequence identity remains monotonic.
 
 ### Breakpoints
 - `set_breakpoint` - Set execution, read, or write breakpoint (supports 4 memory areas: rom_ram, vram, cram, vdp_reg)
@@ -391,6 +393,8 @@ The server exposes tools organized in the following categories:
 - `get_vdp_status` - Get VDP status (flags, counters, mode, SG-1000 mode, extended mode 224)
 - `get_psg_status` - Get SN76489 PSG status for all 4 channels (3 tone + 1 noise): volume, period, frequency, GG stereo
 - `get_ym2413_status` - Get YM2413 FM synth status: 9 channels, instruments, key-on, f-number, block, envelope, rhythm mode, user instrument
+- `get_serial_status` - Get Game Gear serial registers and engine state, parallel/NMI state, physical pins, peer readiness, synchronization diagnostics, and Gear-to-Gear transport metrics
+- `reset_geartogear_metrics` - Reset Gear-to-Gear transport and stall diagnostics
 
 ### Sprites
 - `list_sprites` - List all 64 sprites with position, size, pattern index

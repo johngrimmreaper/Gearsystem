@@ -19,11 +19,14 @@
 
 #define GUI_MENUS_IMPORT
 #include "gui_menus.h"
+
 #include "gui.h"
+#include "gui_cheats.h"
 #include "gui_filedialogs.h"
 #include "gui_popups.h"
 #include "gui_actions.h"
 #include "gui_debug_disassembler.h"
+#include "gui_debug_widgets.h"
 #include "gui_debug_memory.h"
 #include "config.h"
 #include "rewind.h"
@@ -53,6 +56,8 @@ static bool open_sms_bootrom = false;
 static bool open_gg_bootrom = false;
 static bool save_debug_settings = false;
 static bool load_debug_settings = false;
+static const ImVec4 service_mcp_http_color(0.10f, 0.90f, 0.10f, 1.0f);
+static const ImVec4 service_mcp_stdio_color(0.90f, 0.70f, 0.10f, 1.0f);
 static ShaderPresetInfo shader_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int shader_preset_count = 0;
 
@@ -66,10 +71,11 @@ static bool shader_parameter_is_integer(const ShaderPresetParameter* parameter);
 static int shader_parameter_round_to_int(float value);
 static void menu_input(void);
 static void menu_audio(void);
+static void menu_geartogear(void);
 static void menu_debug(void);
 static void menu_about(void);
 static void draw_background_color_menu(const char* label, int theme);
-static void draw_mcp_status(void);
+static void draw_server_status(void);
 static void file_dialogs(void);
 static void keyboard_configuration_item(const char* text, SDL_Scancode* key, int player);
 static void gamepad_configuration_item(const char* text, int* button, int player);
@@ -112,9 +118,10 @@ void gui_main_menu(void)
         menu_video();
         menu_input();
         menu_audio();
+        menu_geartogear();
         menu_debug();
         menu_about();
-        draw_mcp_status();
+        draw_server_status();
 
         gui_main_menu_height = (int)ImGui::GetWindowSize().y;
 
@@ -156,6 +163,11 @@ static void menu_gearsystem(void)
         }
 
         ImGui::Separator();
+        ImGui::MenuItem("Enable Softpatching", "", &config_emulator.softpatching);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Automatically applies a matching .ips patch next to the ROM when loading.");
+
+        ImGui::Separator();
         
         if (ImGui::MenuItem("Reset", config_hotkeys[config_HotkeyIndex_Reset].str, false, media_actions_enabled))
         {
@@ -169,12 +181,14 @@ static void menu_gearsystem(void)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Fast Forward", config_hotkeys[config_HotkeyIndex_FFWD].str, &config_emulator.ffwd, media_actions_enabled))
+        bool geartogear_active = emu_geartogear_is_active();
+
+        if (ImGui::MenuItem("Fast Forward", config_hotkeys[config_HotkeyIndex_FFWD].str, &config_emulator.ffwd, media_actions_enabled && !geartogear_active))
         {
             gui_action_ffwd();
         }
 
-        if (ImGui::BeginMenu("Fast Forward Speed"))
+        if (ImGui::BeginMenu("Fast Forward Speed", !geartogear_active))
         {
             ImGui::PushItemWidth(100.0f);
             ImGui::Combo("##fwd", &config_emulator.ffwd_speed, "X 1.5\0X 2\0X 2.5\0X 3\0Unlimited\0\0");
@@ -182,7 +196,7 @@ static void menu_gearsystem(void)
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Rewind"))
+        if (ImGui::BeginMenu("Rewind", !geartogear_active))
         {
             if (ImGui::MenuItem("Enabled", config_hotkeys[config_HotkeyIndex_Rewind].str, &config_rewind.enabled))
                 rewind_reset();
@@ -194,7 +208,7 @@ static void menu_gearsystem(void)
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Run-Ahead"))
+        if (ImGui::BeginMenu("Run-Ahead", !geartogear_active))
         {
             ImGui::PushItemWidth(140.0f);
             ImGui::Combo("##runahead", &config_emulator.runahead, "Disabled\0" "1 Frame\0" "2 Frames\0" "3 Frames\0\0");
@@ -233,7 +247,7 @@ static void menu_gearsystem(void)
             save_state = true;
         }
 
-        if (ImGui::MenuItem("Load State From...", "", false, media_actions_enabled))
+        if (ImGui::MenuItem("Load State From...", "", false, media_actions_enabled && !geartogear_active))
         {
             open_state = true;
         }
@@ -260,7 +274,7 @@ static void menu_gearsystem(void)
             emu_save_state_slot(config_emulator.save_slot + 1);
         }
 
-        if (ImGui::MenuItem("Load State", config_hotkeys[config_HotkeyIndex_LoadState].str, false, media_actions_enabled))
+        if (ImGui::MenuItem("Load State", config_hotkeys[config_HotkeyIndex_LoadState].str, false, media_actions_enabled && !geartogear_active))
         {
             std::string message("Loading state from slot ");
             message += std::to_string(config_emulator.save_slot + 1);
@@ -457,7 +471,7 @@ static void menu_emulator(void)
                 ImGui::Separator();
                 if (strlen(gui_sms_bootrom_path) > 0)
                 {
-                    ImGui::TextColored(ImVec4(0.10f, 0.90f, 0.10f, 1.0f), "SMS Bootrom loaded");
+                    ImGui::TextColored(service_mcp_http_color, "SMS Bootrom loaded");
                 }
                 else
                 {
@@ -490,7 +504,7 @@ static void menu_emulator(void)
                 ImGui::Separator();
                 if (strlen(gui_gg_bootrom_path) > 0)
                 {
-                    ImGui::TextColored(ImVec4(0.10f, 0.90f, 0.10f, 1.0f), "GG Bootrom loaded");
+                    ImGui::TextColored(service_mcp_http_color, "GG Bootrom loaded");
                 }
                 else
                 {
@@ -580,60 +594,8 @@ static void menu_emulator(void)
 
         ImGui::Separator();
 
-        ImGui::SetNextWindowSizeConstraints({300.0f, 200.0f}, {300.0f, 500.0f});
-        if (ImGui::BeginMenu("Cheats"))
-        {
-            ImGui::Text("Game Genie or Pro Action Replay codes\n(one code per line):");
-
-            ImGui::Columns(2, "cheats", false);
-
-            static char cheat_buffer[20*50] = "";
-            ImGui::PushItemWidth(150);
-            ImGui::InputTextMultiline("##cheats_input", cheat_buffer, IM_ARRAYSIZE(cheat_buffer));
-            ImGui::PopItemWidth();
-
-            ImGui::NextColumn();
-
-            if (ImGui::Button("Add Cheat Code"))
-            {
-                std::string cheats = cheat_buffer;
-                std::istringstream ss(cheats);
-                std::string cheat;
-
-                while (getline(ss, cheat))
-                {
-                    if ((gui_cheat_list.size() < 50) && ((cheat.length() == 7) || (cheat.length() == 11) || (cheat.length() == 8) || (cheat.length() == 9)))
-                    {
-                        gui_cheat_list.push_back(cheat);
-                        emu_add_cheat(cheat.c_str());
-                        cheat_buffer[0] = 0;
-                    }
-                }
-            }
-
-            if (gui_cheat_list.size() > 0)
-            {
-                if (ImGui::Button("Clear All"))
-                {
-                    gui_cheat_list.clear();
-                    emu_clear_cheats();
-                }
-            }
-
-            ImGui::Columns(1);
-
-            std::list<std::string>::iterator it;
-
-            for (it = gui_cheat_list.begin(); it != gui_cheat_list.end(); it++)
-            {
-                if ((it->length() == 7) || (it->length() == 11))
-                    ImGui::Text("Game Genie: %s", it->c_str());
-                else
-                    ImGui::Text("Pro Action Replay: %s", it->c_str());
-            }
-
-            ImGui::EndMenu();
-        }
+        if (ImGui::MenuItem("Cheats...", "", false, !emu_is_empty()))
+            gui_cheats_show();
 
         ImGui::MenuItem("Show ROM info", "", &config_emulator.show_info);
         ImGui::MenuItem("Status Messages", "", &config_emulator.status_messages);
@@ -761,7 +723,7 @@ static void menu_video(void)
             ImGui::PushItemWidth(250.0f);
             ImGui::Combo("##scale", &config_video.scale, "Integer Scale (Auto)\0Integer Scale (Manual)\0Scale to Window Height\0Scale to Window Width & Height\0\0");
             if (config_video.scale == 1)
-                ImGui::SliderInt("##scale_manual", &config_video.scale_manual, 1, 10);
+                ImGui::SliderInt("##scale_manual", &config_video.scale_manual, 1, 20);
             ImGui::PopItemWidth();
             ImGui::EndMenu();
         }
@@ -800,11 +762,12 @@ static void menu_video(void)
 
         if (ImGui::BeginMenu("Vertical Sync"))
         {
-            ImGui::PushItemWidth(240.0f);
 #if defined(_WIN32)
-            if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Fixed (60 Hz, 120 Hz, 240 Hz)\0Variable Refresh Rate (VRR)\0\0"))
+            ImGui::PushItemWidth(220.0f);
+            if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Fixed Vertical Sync\0Variable Refresh Rate (VRR)\0\0"))
 #else
-            if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Fixed (60 Hz, 120 Hz, 240 Hz)\0\0"))
+            ImGui::PushItemWidth(100.0f);
+            if (ImGui::Combo("##sync_mode", &config_video.sync_mode, "Disabled\0Enabled\0\0"))
 #endif
             {
                 if (config_video.sync_mode != config_VideoSync_Disabled)
@@ -818,19 +781,18 @@ static void menu_video(void)
             }
             ImGui::PopItemWidth();
 
+#if defined(_WIN32)
             if (ImGui::IsItemHovered())
             {
                 ImGui::BeginTooltip();
                 ImGui::Text("Disabled: do not synchronize presentation to the monitor.");
-                ImGui::Text("Fixed: use normal VSync for 60 Hz, 120 Hz, and 240 Hz displays.");
-#if defined(_WIN32)
+                ImGui::Text("Fixed Vertical Sync: use normal VSync.");
                 ImGui::Text("VRR: present at the emulator frame rate.");
-                ImGui::Text("VRR requires fullscreen, a VRR display, and G-SYNC,");
+                ImGui::Text("\nVRR requires fullscreen, a VRR display, and G-SYNC,");
                 ImGui::Text("FreeSync, or Adaptive Sync enabled in your monitor and GPU driver settings.");
-#endif
                 ImGui::EndTooltip();
             }
-
+#endif
             ImGui::EndMenu();
         }
 
@@ -1268,6 +1230,12 @@ static void menu_input(void)
                     config_emulator.paddle_control = false;
                     emu_enable_paddle(false);
                 }
+
+                if (config_emulator.light_phaser && config_emulator.sports_pad)
+                {
+                    config_emulator.sports_pad = false;
+                    emu_enable_sports_pad(false);
+                }
             }
 
             if (ImGui::MenuItem("Enable Crosshair", "", &config_emulator.light_phaser_crosshair))
@@ -1319,6 +1287,12 @@ static void menu_input(void)
                     config_emulator.light_phaser = false;
                     emu_enable_phaser(false);
                 }
+
+                if (config_emulator.paddle_control && config_emulator.sports_pad)
+                {
+                    config_emulator.sports_pad = false;
+                    emu_enable_sports_pad(false);
+                }
             }
 
             ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse);
@@ -1328,6 +1302,36 @@ static void menu_input(void)
             }
 
             ImGui::SliderInt("##paddle_sensitivity", &config_emulator.paddle_sensitivity, 1, 15, "Sensitivity = %d");
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Sports Pad"))
+        {
+            if (ImGui::MenuItem("Enable Sports Pad", "", &config_emulator.sports_pad))
+            {
+                emu_enable_sports_pad(config_emulator.sports_pad);
+
+                if (config_emulator.sports_pad && config_emulator.light_phaser)
+                {
+                    config_emulator.light_phaser = false;
+                    emu_enable_phaser(false);
+                }
+
+                if (config_emulator.sports_pad && config_emulator.paddle_control)
+                {
+                    config_emulator.paddle_control = false;
+                    emu_enable_paddle(false);
+                }
+            }
+
+            ImGui::MenuItem("Capture Mouse", config_hotkeys[config_HotkeyIndex_CaptureMouse].str, &config_emulator.capture_mouse);
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("When enabled, the mouse will be captured inside\nthe emulator window to use the Sports Pad freely.\nPress %s to release the mouse.", config_hotkeys[config_HotkeyIndex_CaptureMouse].str);
+            }
+
+            ImGui::SliderInt("##sports_pad_sensitivity", &config_emulator.sports_pad_sensitivity, 1, 15, "Sensitivity = %d");
 
             ImGui::EndMenu();
         }
@@ -1563,9 +1567,10 @@ static void menu_debug(void)
             ImGui::Separator();
 
             if (stdio_running)
-                ImGui::TextColored(ImVec4(0.90f, 0.70f, 0.10f, 1.0f), "STDIO mode active");
+                ImGui::TextColored(service_mcp_stdio_color, "STDIO mode active");
             else if (http_running)
-                ImGui::TextColored(ImVec4(0.10f, 0.90f, 0.10f, 1.0f), "Listening on %s:%d", config_emulator.mcp_http_address.c_str(), config_emulator.mcp_tcp_port);
+                ImGui::TextColored(service_mcp_http_color, "Listening on %s:%d",
+                    emu_mcp_get_http_address(), emu_mcp_get_http_port());
             else
                 ImGui::TextColored(ImVec4(0.98f, 0.15f, 0.45f, 1.0f), "Stopped");
 
@@ -1639,6 +1644,10 @@ static void menu_debug(void)
 
         ImGui::Separator();
 
+        ImGui::MenuItem("Show Game Gear Serial Registers", "", &config_debug.show_geartogear_serial_registers, config_debug.debug);
+        ImGui::MenuItem("Show Game Gear Serial Status", "", &config_debug.show_geartogear_serial_status, config_debug.debug);
+        ImGui::MenuItem("Show Gear-to-Gear (Transport)", "", &config_debug.show_geartogear_transport, config_debug.debug);
+
         ImGui::MenuItem("Show Rewind", "", &config_debug.show_rewind, config_debug.debug);
 
 
@@ -1673,6 +1682,110 @@ static void menu_debug(void)
 #endif
 }
 
+static void menu_geartogear(void)
+{
+    if (!ImGui::BeginMenu("Gear-to-Gear"))
+        return;
+
+    gui_in_use = true;
+    GearToGearStatus status = emu_geartogear_get_status();
+    bool active = emu_geartogear_is_active();
+    const ImVec4 cornflower_blue(0.39f, 0.58f, 0.93f, 1.0f);
+    const ImVec4 error_red(0.98f, 0.15f, 0.45f, 1.0f);
+
+#if defined(__APPLE__)
+    if (ImGui::MenuItem("New " GS_TITLE " Window", "", false, application_can_launch_new_instance()))
+    {
+        application_launch_new_instance();
+    }
+    ImGui::Separator();
+#endif
+
+    if (ImGui::MenuItem("Connect", NULL, false, !active))
+        emu_geartogear_connect(config_emulator.geartogear_session);
+    if (ImGui::MenuItem("Disconnect", NULL, false, status.mode != GearToGearModeDisabled))
+        emu_geartogear_stop();
+
+    ImGui::Separator();
+
+    switch (status.mode)
+    {
+        case GearToGearModeConnected:
+            ImGui::TextColored(cornflower_blue, "%s", status.endpoint);
+            ImGui::TextDisabled("Peer %d of %d", status.local_peer_id, status.peer_count);
+            if (status.cable_connected)
+            {
+                ImGui::TextDisabled("Game Gear hardware connected (%s)", status.pacing_peer ? "pacing peer" : "following peer");
+            }
+            else if (status.local_hardware_ready)
+                ImGui::TextDisabled("Waiting for remote Game Gear hardware");
+            else
+                ImGui::TextDisabled("Local Game Gear hardware inactive");
+            break;
+        case GearToGearModeFault:
+            ImGui::TextColored(error_red, "%s", status.last_error);
+            break;
+        default:
+            ImGui::TextColored(error_red, "Disconnected");
+            break;
+    }
+
+    ImGui::Separator();
+
+    ImGui::BeginDisabled(active);
+
+    ImGui::Text("Session:");
+    ImGui::SameLine(110.0f);
+    ImGui::SetNextItemWidth(60.0f);
+
+    if (ImGui::InputInt("##geartogear_session", &config_emulator.geartogear_session, 0, 0))
+        config_emulator.geartogear_session = CLAMP(config_emulator.geartogear_session, 1, 255);
+
+    ImGui::EndDisabled();
+
+    ImGui::Separator();
+
+#if defined(_WIN32)
+    const int stall_min = 1000;
+    const int stall_max = 10000;
+    const int stall_step = 250;
+    const int stall_default = 5000;
+#elif defined(__APPLE__)
+    const int stall_min = 50;
+    const int stall_max = 1000;
+    const int stall_step = 50;
+    const int stall_default = 100;
+#else
+    const int stall_min = 50;
+    const int stall_max = 2000;
+    const int stall_step = 50;
+    const int stall_default = 250;
+#endif
+
+    if (ImGui::BeginMenu("Stall Threshold"))
+    {
+        ImGui::PushItemWidth(180.0f);
+        if (SliderIntWithSteps("##geartogear_stall", &config_emulator.geartogear_stall_us, stall_min, stall_max, stall_step, "%d us"))
+        {
+            emu_geartogear_set_normal_barrier_stall_us((u32)config_emulator.geartogear_stall_us);
+        }
+        ImGui::PopItemWidth();
+
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Lower values reduce CPU usage but may cause stalls.");
+            ImGui::Text("Higher values tolerate scheduling delays but use more CPU.");
+            ImGui::NewLine();
+            ImGui::Text("Recommended: %d us", stall_default);
+            ImGui::EndTooltip();
+        }
+        ImGui::EndMenu();
+    }
+
+    ImGui::EndMenu();
+}
+
 static void menu_about(void)
 {
     if (ImGui::BeginMenu("About"))
@@ -1687,31 +1800,61 @@ static void menu_about(void)
     }
 }
 
-static void draw_mcp_status(void)
+static void draw_server_status(void)
 {
-    if (!emu_mcp_is_running())
+    bool mcp_running = emu_mcp_is_running();
+    GearToGearStatus geartogear = emu_geartogear_get_status();
+    bool geartogear_active = geartogear.mode == GearToGearModeConnected;
+
+    if (!mcp_running && !geartogear_active)
         return;
 
-    char status[128];
-    ImVec4 color(0.10f, 0.90f, 0.10f, 1.0f);
+    char geartogear_status[64];
+    char mcp_status[128];
+    bool show_geartogear_status = false;
+    bool show_mcp_status = false;
+    ImVec4 geartogear_color(0.39f, 0.58f, 0.93f, 1.0f);
+    ImVec4 mcp_color = service_mcp_http_color;
 
-    int transport_mode = emu_mcp_get_transport_mode();
-    if (transport_mode == 0)
+    if (geartogear.mode == GearToGearModeConnected)
     {
-        snprintf(status, sizeof(status), "MCP: STDIO");
-        color = ImVec4(0.90f, 0.70f, 0.10f, 1.0f);
+        snprintf(geartogear_status, sizeof(geartogear_status),
+            "GEAR-TO-GEAR: S%u P%d/%d", geartogear.session,
+            geartogear.local_peer_id, geartogear.peer_count);
+        show_geartogear_status = true;
     }
-    else if (transport_mode == 1)
+
+    if (mcp_running)
     {
-        snprintf(status, sizeof(status), "MCP: HTTP (%s:%d)", config_emulator.mcp_http_address.c_str(), config_emulator.mcp_tcp_port);
-    }
-    else
-    {
-        return;
+        int transport_mode = emu_mcp_get_transport_mode();
+        if (transport_mode == 0)
+        {
+            snprintf(mcp_status, sizeof(mcp_status), "MCP: STDIO");
+            mcp_color = service_mcp_stdio_color;
+            show_mcp_status = true;
+        }
+        else if (transport_mode == 1)
+        {
+            snprintf(mcp_status, sizeof(mcp_status), "MCP: HTTP (%s:%d)", config_emulator.mcp_http_address.c_str(), config_emulator.mcp_tcp_port);
+            show_mcp_status = true;
+        }
     }
 
     ImGuiStyle& style = ImGui::GetStyle();
-    float text_width = ImGui::CalcTextSize(status).x;
+    float spacing = style.ItemSpacing.x * 2.0f;
+    float text_width = 0.0f;
+
+    if (show_geartogear_status)
+        text_width += ImGui::CalcTextSize(geartogear_status).x;
+
+    if (show_mcp_status)
+    {
+        if (text_width > 0.0f)
+            text_width += spacing;
+
+        text_width += ImGui::CalcTextSize(mcp_status).x;
+    }
+
     float status_x = ImGui::GetWindowWidth() - text_width - style.ItemSpacing.x - 10.0f;
     float cursor_x = ImGui::GetCursorPosX();
 
@@ -1720,7 +1863,17 @@ static void draw_mcp_status(void)
 
     ImGui::SameLine(status_x);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextColored(color, "%s", status);
+
+    if (show_geartogear_status)
+        ImGui::TextColored(geartogear_color, "%s", geartogear_status);
+
+    if (show_mcp_status)
+    {
+        if (show_geartogear_status)
+            ImGui::SameLine(0.0f, spacing);
+
+        ImGui::TextColored(mcp_color, "%s", mcp_status);
+    }
 }
 
 static void file_dialogs(void)

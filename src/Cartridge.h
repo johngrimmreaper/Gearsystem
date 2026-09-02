@@ -101,33 +101,37 @@ public:
     bool IsGameGear() const;
     bool IsGameGearInSMSMode() const;
     int GetGameGearASIC() const;
-    bool IsSG1000() const;
+    INLINE bool IsSG1000() const;
     bool IsSG1000II() const;
     bool IsPAL() const;
     bool IsValidROM() const;
     bool IsReady() const;
     bool IsInGameDatabase() const;
-    bool HasRAMWithoutBattery() const;
+    const char* GetGameDatabaseName() const;
+    INLINE bool HasRAMWithoutBattery() const;
     CartridgeTypes GetType() const;
     CartridgeZones GetZone() const;
     void ForceConfig(ForceConfiguration config);
     int GetFeatures() const;
-    int GetROMSize() const;
-    int GetROMBankCount() const;
-    int GetROMBankCount8k() const;
+    INLINE int GetROMSize() const;
+    INLINE int GetROMBankCount() const;
+    INLINE int GetROMBankCount8k() const;
     const char* GetFilePath() const;
     const char* GetFileName() const;
     const char* GetFileDirectory() const;
-    u8* GetROM() const;
-    bool LoadFromFile(const char* path);
+    INLINE u8* GetROM() const;
+    bool LoadFromFile(const char* path, bool softpatching = false);
     bool LoadFromBuffer(const u8* buffer, int size, const char* path = NULL);
+    bool IsSoftpatchApplied() const;
+    const char* GetSoftpatchPath() const;
     void SetGameGenieCheat(const char* szCheat);
     void ClearGameGenieCheats();
 
 private:
     bool GatherMetadata(u32 crc);
     void GetInfoFromDB(u32 crc);
-    bool LoadFromZipFile(const u8* buffer, int size);
+    bool LoadFromZipFile(const u8* buffer, int size, bool softpatching);
+    bool LoadFromBufferWithSoftpatch(const u8* buffer, int size, bool softpatching);
     bool TestValidROM(u16 location);
     void SetROMPath(const char* path);
     int CalculateROMBankCount(int romSize, int bankSize) const;
@@ -140,6 +144,7 @@ private:
     bool m_bValidROM;
     bool m_bReady;
     bool m_bInGameDatabase;
+    const char* m_pGameDatabaseName;
     char m_szFilePath[512];
     char m_szFileName[512];
     char m_szFileDirectory[512];
@@ -155,6 +160,8 @@ private:
     bool m_bRAMWithoutBattery;
     u32 m_iCRC;
     int m_iFeatures;
+    bool m_softpatch_applied;
+    char m_softpatch_path[4096];
 
     struct GameGenieCode
     {
@@ -164,5 +171,35 @@ private:
 
     std::list<GameGenieCode> m_GameGenieList;
 };
+
+INLINE bool Cartridge::IsSG1000() const
+{
+    return m_bSG1000;
+}
+
+INLINE bool Cartridge::HasRAMWithoutBattery() const
+{
+    return m_bRAMWithoutBattery;
+}
+
+INLINE int Cartridge::GetROMSize() const
+{
+    return m_iROMSize;
+}
+
+INLINE int Cartridge::GetROMBankCount() const
+{
+    return m_iROMBankCount16k;
+}
+
+INLINE int Cartridge::GetROMBankCount8k() const
+{
+    return m_iROMBankCount8k;
+}
+
+INLINE u8* Cartridge::GetROM() const
+{
+    return m_pROM;
+}
 
 #endif	/* CARTRIDGE_H */

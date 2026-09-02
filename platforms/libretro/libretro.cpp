@@ -23,6 +23,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <math.h>
+#include <string>
+#include <vector>
 
 #include "libretro.h"
 #include "../../src/gearsystem.h"
@@ -37,6 +39,7 @@ static const char slash = '/';
 #define RETRO_DEVICE_SMS_GG_PAD     RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
 #define RETRO_DEVICE_LIGHT_PHASER   RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_LIGHTGUN, 0)
 #define RETRO_DEVICE_PADDLE         RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_MOUSE, 0)
+#define RETRO_DEVICE_SPORTS_PAD     RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_ANALOG, 1)
 
 static retro_environment_t environ_cb;
 static retro_video_refresh_t video_cb;
@@ -66,6 +69,7 @@ static bool lightgun_crosshair = false;
 static Video::LightPhaserCrosshairShape lightgun_crosshair_shape = Video::LightPhaserCrosshairCross;
 static Video::LightPhaserCrosshairColor lightgun_crosshair_color = Video::LightPhaserCrosshairWhite;
 static int paddle_sensitivity = 0;
+static int sports_pad_sensitivity = 8;
 static bool bootrom_sms = false;
 static bool bootrom_gg = false;
 static bool libretro_supports_bitmasks = false;
@@ -80,6 +84,7 @@ static u8* frame_buffer;
 static Cartridge::ForceConfiguration config;
 static GearsystemCore::GlassesConfig glasses_config;
 static const retro_vfs_interface* vfs_interface = NULL;
+static std::vector<std::string> libretro_cheats;
 
 static void load_bootroms(void);
 static void set_controller_info(void);
@@ -89,6 +94,24 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
 static void release_controller_input(unsigned port);
 static void update_input(void);
 static void check_variables(void);
+
+static void apply_cheats(void)
+{
+    core->ClearCheats();
+
+    for (size_t i = 0; i < libretro_cheats.size(); i++)
+    {
+        if (!libretro_cheats[i].empty())
+            core->SetCheat(libretro_cheats[i].c_str());
+    }
+}
+
+static void clear_cheats(void)
+{
+    libretro_cheats.clear();
+    if (IsValidPointer(core))
+        core->ClearCheats();
+}
 
 static void fallback_log(enum retro_log_level level, const char *fmt, ...)
 {
@@ -190,6 +213,7 @@ void retro_init(void)
 
 void retro_deinit(void)
 {
+    clear_cheats();
     SafeDeleteArray(frame_buffer);
     SafeDelete(core);
     vfs_interface = NULL;
@@ -234,7 +258,7 @@ void retro_set_controller_port_device(unsigned port, unsigned device)
 void retro_get_system_info(struct retro_system_info *info)
 {
     memset(info, 0, sizeof(*info));
-    info->library_name     = "Gearsystem";
+    info->library_name     = GS_TITLE;
     info->library_version  = GS_VERSION;
     info->need_fullpath    = false;
     info->valid_extensions = "sms|gg|sg|mv|bin|rom";
@@ -253,7 +277,7 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     info->geometry.max_width    = GS_RESOLUTION_MAX_WIDTH_WITH_OVERSCAN;
     info->geometry.max_height   = GS_RESOLUTION_MAX_HEIGHT_WITH_OVERSCAN;
     info->geometry.aspect_ratio = aspect_ratio;
-    info->timing.fps            = runtime_info.region == Region_NTSC ? 60.0 : 50.0;
+    info->timing.fps            = runtime_info.fps;
     info->timing.sample_rate    = 44100.0;
 }
 
@@ -350,6 +374,7 @@ bool retro_load_game(const struct retro_game_info *info)
     if (!info)
         return false;
 
+    clear_cheats();
     core->GetCartridge()->Reset();
     check_variables();
     load_bootroms();
@@ -397,6 +422,7 @@ bool retro_load_game(const struct retro_game_info *info)
 
 void retro_unload_game(void)
 {
+    clear_cheats();
 }
 
 unsigned retro_get_region(void)
@@ -457,16 +483,24 @@ size_t retro_get_memory_size(unsigned id)
 
 void retro_cheat_reset(void)
 {
-    core->ClearCheats();
+    clear_cheats();
 }
 
 void retro_cheat_set(unsigned index, bool enabled, const char *code)
 {
-    if (code == NULL)
-        return;
-
     if (enabled)
-        core->SetCheat(code);
+    {
+        if (index >= libretro_cheats.size())
+            libretro_cheats.resize(index + 1);
+
+        libretro_cheats[index] = code ? code : "";
+    }
+    else if (index < libretro_cheats.size())
+    {
+        libretro_cheats[index].clear();
+    }
+
+    apply_cheats();
 }
 
 static bool load_bootrom_file(const char* path, bool gg)
@@ -548,17 +582,19 @@ static void set_controller_info(void)
         { "Master System / Game Gear Pad", RETRO_DEVICE_SMS_GG_PAD },
         { "Sega Light Phaser", RETRO_DEVICE_LIGHT_PHASER },
         { "Paddle Control", RETRO_DEVICE_PADDLE },
+        { "Sports Pad", RETRO_DEVICE_SPORTS_PAD },
     };
 
     static const struct retro_controller_description port_2[] = {
         { "Joypad Auto", RETRO_DEVICE_JOYPAD },
         { "Joypad Port Empty", RETRO_DEVICE_NONE },
         { "Master System / Game Gear Pad", RETRO_DEVICE_SMS_GG_PAD },
+        { "Sports Pad", RETRO_DEVICE_SPORTS_PAD },
     };
 
     static const struct retro_controller_info ports[] = {
-        { port_1, 5 },
-        { port_2, 3 },
+        { port_1, 6 },
+        { port_2, 4 },
         { NULL, 0 },
     };
 
@@ -611,6 +647,7 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
 
     bool phaser = false;
     bool paddle = false;
+    bool sports_pad = false;
 
     switch (device)
     {
@@ -633,6 +670,11 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
                 log_cb(RETRO_LOG_INFO, "Controller %u: Paddle\n", port);
             paddle = true;
             break;
+        case RETRO_DEVICE_SPORTS_PAD:
+            if (log_device && log_cb)
+                log_cb(RETRO_LOG_INFO, "Controller %u: Sports Pad\n", port);
+            sports_pad = true;
+            break;
         default:
             if (log_device && log_cb)
                 log_cb(RETRO_LOG_DEBUG, "Setting descriptors for unsupported device.\n");
@@ -644,6 +686,8 @@ static void apply_controller_device(unsigned port, unsigned device, bool log_dev
         core->EnablePhaser(phaser);
         core->EnablePaddle(paddle);
     }
+
+    core->EnableSportsPad((GS_Joypads)port, sports_pad);
 }
 
 static void release_controller_input(unsigned port)
@@ -880,6 +924,39 @@ static void update_input(void)
 
             break;
         }
+        case RETRO_DEVICE_SPORTS_PAD:
+        {
+            s16 x = input_state_cb(player, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
+            s16 y = input_state_cb(player, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
+
+            if ((x > -4096) && (x < 4096))
+                x = 0;
+            if ((y > -4096) && (y < 4096))
+                y = 0;
+
+            int sen = sports_pad_sensitivity;
+            if (sen < 1)
+                sen = 1;
+            float sensitivity = (float)sen / 32768.0f;
+            core->MoveSportsPad((GS_Joypads)player, x * sensitivity, y * sensitivity);
+
+            if (input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B))
+                core->KeyPressed((GS_Joypads)player, Key_1);
+            else
+                core->KeyReleased((GS_Joypads)player, Key_1);
+            if (input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A))
+                core->KeyPressed((GS_Joypads)player, Key_2);
+            else
+                core->KeyReleased((GS_Joypads)player, Key_2);
+            if (input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START))
+                core->KeyPressed((GS_Joypads)player, Key_Start);
+            else
+                core->KeyReleased((GS_Joypads)player, Key_Start);
+            if (input_state_cb(player, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT))
+                reset_pressed = true;
+
+            break;
+        }
         default:
             break;
         }
@@ -988,6 +1065,14 @@ static void check_variables(void)
     if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
     {
         paddle_sensitivity = atoi(var.value);
+    }
+
+    var.key = "gearsystem_sports_pad_sensitivity";
+    var.value = NULL;
+
+    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+    {
+        sports_pad_sensitivity = atoi(var.value);
     }
 
     var.key = "gearsystem_system";

@@ -92,7 +92,7 @@ void Memory::SetProcessor(Processor* pProcessor)
 void Memory::Init()
 {
     m_pMap = new u8[0x10000];
-#ifndef GS_DISABLE_DISASSEMBLER
+#if !defined(GS_DISABLE_DISASSEMBLER)
     m_pDisassembledMap = new GS_Disassembler_Record*[0x10000];
     for (int i = 0; i < 0x10000; i++)
     {
@@ -115,9 +115,11 @@ void Memory::Reset(bool bGameGear)
     m_DesiredMediaSlot = IsBootromEnabled() ? m_StoredMediaSlot : CartridgeSlot;
     m_bIOEnabled = true;
 
-    for (int i = 0; i < 0x10000; i++)
+    memset(m_pMap, 0x00, 0x10000);
+
+    if (!bGameGear && !m_pCartridge->IsSG1000() && (m_pCartridge->GetZone() == Cartridge::CartridgeJapanSMS))
     {
-        m_pMap[i] = 0x00;
+        memset(m_pMap + 0xC000, 0xF0, 0x4000);
     }
 
     if (IsBootromEnabled())
@@ -465,7 +467,7 @@ Memory::MediaSlots Memory::GetCurrentSlot()
 
 void Memory::ResetDisassemblerRecords()
 {
-#ifndef GS_DISABLE_DISASSEMBLER
+#if !defined(GS_DISABLE_DISASSEMBLER)
     if (IsValidPointer(m_pDisassembledROMMap))
     {
         for (int i = 0; i < MAX_ROM_SIZE; i++)
