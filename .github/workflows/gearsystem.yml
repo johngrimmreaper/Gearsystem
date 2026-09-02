@@ -43,6 +43,9 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get install -y build-essential cmake \
+        libasound2-dev libpulse-dev libpipewire-0.3-dev libjack-dev \
+        libsndio-dev libfribidi-dev libthai-dev libibus-1.0-dev \
+        libusb-1.0-0-dev libunwind-dev libaudio-dev \
         libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
         libxi-dev libxss-dev libxkbcommon-dev libwayland-dev libdecor-0-dev \
         libdrm-dev libgbm-dev libgl1-mesa-dev libegl1-mesa-dev libdbus-1-dev libudev-dev libxtst-dev
@@ -91,6 +94,9 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get install -y build-essential cmake \
+        libasound2-dev libpulse-dev libpipewire-0.3-dev libjack-dev \
+        libsndio-dev libfribidi-dev libthai-dev libibus-1.0-dev \
+        libusb-1.0-0-dev libunwind-dev libaudio-dev \
         libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev \
         libxi-dev libxss-dev libxkbcommon-dev libwayland-dev libdecor-0-dev \
         libdrm-dev libgbm-dev libgl1-mesa-dev libegl1-mesa-dev libdbus-1-dev libudev-dev libxtst-dev
@@ -223,6 +229,8 @@ jobs:
         fetch-depth: 0
     - name: Setup msbuild
       uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57 # v3
+      with:
+        msbuild-architecture: x64
     - name: Download SDL3 development libraries
       shell: bash
       env:
@@ -239,7 +247,7 @@ jobs:
       run: |
         echo "BUILD_NUMBER=$(git describe --abbrev=7 --dirty --always --tags)" >> $GITHUB_ENV
     - name: msbuild
-      run: msbuild ${{ env.NAME_UPPER }}.sln /t:Clean,Build /p:EmulatorBuild="${{ env.BUILD_NUMBER }}" /p:Configuration=Release /p:Platform=${{ matrix.architecture }}
+      run: msbuild ${{ env.NAME_UPPER }}.sln /t:Clean,Build /p:EmulatorBuild="${{ env.BUILD_NUMBER }}" /p:Configuration=Release /p:Platform=${{ matrix.architecture }} /p:PreferredToolArchitecture=x64
       working-directory: platforms/windows
     - name: Prepare artifact directory
       run: |
@@ -272,7 +280,7 @@ jobs:
         echo "BUILD_NUMBER=$(git describe --abbrev=7 --dirty --always --tags)" >> $GITHUB_ENV
     - name: Run FreeBSD and gmake
       id: test
-      uses: vmactions/freebsd-vm@77ed28d336d03fe19a3f4f7266c1d2c4714dd79d # v1
+      uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1
       with:
         usesh: true
         prepare: pkg install -y git gmake pkgconf sdl3 lang/gcc

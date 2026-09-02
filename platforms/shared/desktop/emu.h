@@ -21,6 +21,7 @@
 #define EMU_H
 
 #include "gearsystem.h"
+#include "geartogear/geartogear_manager.h"
 
 #ifdef EMU_IMPORT
     #define EXTERN
@@ -76,6 +77,8 @@ EXTERN void emu_enable_phaser(bool enable);
 EXTERN void emu_enable_phaser_crosshair(bool enable, int shape, int color);
 EXTERN void emu_set_paddle(float x);
 EXTERN void emu_enable_paddle(bool enable);
+EXTERN void emu_move_sports_pad(float x, float y);
+EXTERN void emu_enable_sports_pad(bool enable);
 EXTERN void emu_pause(void);
 EXTERN void emu_resume(void);
 EXTERN bool emu_is_paused(void);
@@ -99,6 +102,7 @@ EXTERN void update_savestates_data(void);
 EXTERN void emu_add_cheat(const char* cheat);
 EXTERN void emu_clear_cheats();
 EXTERN void emu_get_runtime(GS_RuntimeInfo& runtime);
+EXTERN double emu_get_frame_rate(void);
 EXTERN void emu_get_info(char* info, int buffer_size);
 EXTERN GearsystemCore* emu_get_core(void);
 EXTERN void emu_debug_step_over(void);
@@ -134,7 +138,19 @@ EXTERN void emu_mcp_start(void);
 EXTERN void emu_mcp_stop(void);
 EXTERN bool emu_mcp_is_running(void);
 EXTERN int emu_mcp_get_transport_mode(void);
+EXTERN const char* emu_mcp_get_http_address(void);
+EXTERN int emu_mcp_get_http_port(void);
 EXTERN void emu_mcp_pump_commands(void);
+EXTERN bool emu_geartogear_connect(int session);
+EXTERN void emu_geartogear_stop(void);
+EXTERN void emu_geartogear_pump(void);
+EXTERN bool emu_geartogear_is_active(void);
+EXTERN bool emu_geartogear_is_cable_connected(void);
+EXTERN bool emu_geartogear_is_pacing_peer(void);
+EXTERN GearToGearStatus emu_geartogear_get_status(void);
+EXTERN GS_GearToGear_DebugState emu_geartogear_get_debug_state(void);
+EXTERN void emu_geartogear_reset_metrics(void);
+EXTERN void emu_geartogear_set_normal_barrier_stall_us(u32 stall_us);
 
 #undef EMU_IMPORT
 #undef EXTERN

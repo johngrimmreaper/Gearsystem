@@ -16,6 +16,7 @@ public:
     void Reset(int clockRate);
     void Write(u8 port, u8 value);
     u8 Read();
+    u8 GetSelectedRegister() const;
     void Tick(unsigned int clockCycles);
     int EndFrame(s16* pSampleBuffer);
     void Enable(bool bEnabled);
@@ -24,12 +25,13 @@ public:
     void LoadStateV1(std::istream& stream);
 
 private:
+    INLINE void WriteSample(s16 sample);
     void Sync();
 
 private:
     int m_iCycleCounter;
     int m_iSampleCounter;
-    int m_iCyclesPerSample;
+    int m_iSampleRateFactor;
     s16* m_pBuffer;
     int m_iBufferIndex;
     int m_ElapsedCycles;
@@ -38,5 +40,7 @@ private:
     s16 m_CurrentSample;
     bool m_bEnabled;
 };
+
+const int kYM2413SampleAccuracy = 16;
 
 #endif	/* YM2413_H */

@@ -25,6 +25,7 @@
 #include "audio/Sms_Apu.h"
 #include "YM2413.h"
 #include "VgmRecorder.h"
+#include "TraceLogger.h"
 
 class Cartridge;
 
@@ -43,6 +44,7 @@ public:
     void WriteGGStereoRegister(u8 value);
     void YM2413Write(u8 port, u8 value);
     u8 YM2413Read();
+    void SetTraceLogger(TraceLogger* pTraceLogger);
     void Tick(unsigned int clockCycles);
     void EndFrame(s16* pSampleBuffer, int* pSampleCount);
     void DisableYM2413(bool bDisable);
@@ -54,13 +56,19 @@ public:
     void SaveState(std::ostream& stream);
     void LoadState(std::istream& stream, int version);
     void LoadStateV1(std::istream& stream);
-    bool StartVgmRecording(const char* file_path, int clock_rate, bool is_pal, bool has_ym2413);
+    bool StartVgmRecording(const char* file_path, int clock_rate, bool is_pal, bool has_ym2413, const VgmMetadata& metadata);
     void StopVgmRecording();
     bool IsVgmRecording() const;
 
 private:
     bool IsYM2413OutputEnabled() const;
     void SyncYM2413State();
+    INLINE void TracePSGEvent(u8 value);
+    INLINE void TracePSGStereoEvent(u8 value);
+    INLINE void TraceYM2413Event(u8 port, u8 value, bool accepted);
+    void LogPSGEvent(u8 value);
+    void LogPSGStereoEvent(u8 value);
+    void LogYM2413Event(u8 port, u8 value, bool accepted);
 
 private:
     YM2413* m_pYM2413;
@@ -82,6 +90,7 @@ private:
     float m_fm_volume;
     VgmRecorder m_VgmRecorder;
     bool m_bVgmRecordingEnabled;
+    TraceLogger* m_pTraceLogger;
     blip_sample_t* m_pDebugChannelBuffer[4];
     long m_iDebugChannelSamples[4];
 };
@@ -92,11 +101,16 @@ inline void Audio::Tick(unsigned int clockCycles)
 {
     m_ElapsedCycles += clockCycles;
     m_pYM2413->Tick(clockCycles);
+#ifndef GS_DISABLE_VGMRECORDER
+    if (m_bVgmRecordingEnabled)
+        m_VgmRecorder.UpdateTiming(clockCycles);
+#endif
 }
 
 inline void Audio::WriteAudioRegister(u8 value)
 {
     m_pApu->write_data(m_ElapsedCycles, value);
+    TracePSGEvent(value);
 #ifndef GS_DISABLE_VGMRECORDER
     if (m_bVgmRecordingEnabled)
         m_VgmRecorder.WritePSG(value);
@@ -106,6 +120,7 @@ inline void Audio::WriteAudioRegister(u8 value)
 inline void Audio::WriteGGStereoRegister(u8 value)
 {
     m_pApu->write_ggstereo(m_ElapsedCycles, value);
+    TracePSGStereoEvent(value);
 #ifndef GS_DISABLE_VGMRECORDER
     if (m_bVgmRecordingEnabled)
         m_VgmRecorder.WriteGGStereo(value);
@@ -114,8 +129,12 @@ inline void Audio::WriteGGStereoRegister(u8 value)
 
 inline void Audio::YM2413Write(u8 port, u8 value)
 {
-    if (m_bYM2413ForceDisabled || m_bYM2413CartridgeNotSupported)
+    bool accepted = !m_bYM2413ForceDisabled && !m_bYM2413CartridgeNotSupported;
+    if (!accepted)
+    {
+        TraceYM2413Event(port, value, false);
         return;
+    }
 
     if (port == 0xF2)
     {
@@ -136,10 +155,30 @@ inline void Audio::YM2413Write(u8 port, u8 value)
 
     m_pYM2413->Write(port, value);
 
+    TraceYM2413Event(port, value, true);
+
 #ifndef GS_DISABLE_VGMRECORDER
     if (m_bVgmRecordingEnabled && (port == 0xF0 || port == 0xF1))
         m_VgmRecorder.WriteYM2413(port, value);
 #endif
+}
+
+INLINE void Audio::TracePSGEvent(u8 value)
+{
+    if (m_pTraceLogger->IsEnabled(TRACE_PSG))
+        LogPSGEvent(value);
+}
+
+INLINE void Audio::TracePSGStereoEvent(u8 value)
+{
+    if (m_pTraceLogger->IsEventEnabled(TRACE_PSG, TRACE_PSG_STEREO))
+        LogPSGStereoEvent(value);
+}
+
+INLINE void Audio::TraceYM2413Event(u8 port, u8 value, bool accepted)
+{
+    if (m_pTraceLogger->IsEnabled(TRACE_YM2413))
+        LogYM2413Event(port, value, accepted);
 }
 
 inline u8 Audio::YM2413Read()

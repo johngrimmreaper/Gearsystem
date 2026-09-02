@@ -22,6 +22,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/application_headless.cpp \
     $(DESKTOP_SRC_DIR)/config.cpp \
     $(DESKTOP_SRC_DIR)/gui.cpp \
+    $(DESKTOP_SRC_DIR)/gui_cheats.cpp \
     $(DESKTOP_SRC_DIR)/gui_filedialogs.cpp \
     $(DESKTOP_SRC_DIR)/gui_menus.cpp \
     $(DESKTOP_SRC_DIR)/gui_popups.cpp \
@@ -36,8 +37,10 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/gui_debug_psg.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_ym2413.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_video.cpp \
+    $(DESKTOP_SRC_DIR)/gui_debug_geartogear.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_rewind.cpp \
     $(DESKTOP_SRC_DIR)/gui_debug_trace_logger.cpp \
+    $(DESKTOP_SRC_DIR)/trace_logger_formatter.cpp \
     $(DESKTOP_SRC_DIR)/ogl_renderer.cpp \
     $(DESKTOP_SRC_DIR)/ogl_shader_program.cpp \
     $(DESKTOP_SRC_DIR)/ogl_shader_chain.cpp \
@@ -48,6 +51,7 @@ SOURCES_CXX := \
     $(DESKTOP_SRC_DIR)/emu.cpp \
     $(DESKTOP_SRC_DIR)/sound_queue.cpp \
     $(DESKTOP_SRC_DIR)/single_instance.cpp \
+    $(DESKTOP_SRC_DIR)/geartogear/geartogear_manager.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_debug_adapter.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_tool_registry.cpp \
     $(DESKTOP_SRC_DIR)/mcp/mcp_server.cpp \
