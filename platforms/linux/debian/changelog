@@ -1,3 +1,39 @@
+gearsystem (3.9.18-1) UNRELEASED; urgency=medium
+
+  * New iOS App (in development)
+  * Improved accuracy in Game Gear SMS mode
+  * Better VSync at different refresh rates
+  * Minimized input lag with 120, 144 and 240 Hz screens
+  * Updated Game Controller DB
+  * Improved debugger tools
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 1 Sep 2026 23:37:29 +0200
+
+gearsystem (3.9.17-1) UNRELEASED; urgency=medium
+
+  * Gear-to-Gear Link Cable support
+  * Sports Pad Controller
+  * IPS soft-patching
+  * Improved cheats window
+  * Improved light theme
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Thu, 27 Aug 2026 17:52:33 +0200
+
+gearsystem (3.9.16-1) UNRELEASED; urgency=medium
+
+  * Improved accuracy
+  * Performance optimizations
+  * Improved VGM recorder with precise timing
+  * Added Sharp Bilinear shaders
+  * Improved MCP server
+  * Improved Trace Logger in debugger
+  * Updated Game Controller DB
+  * Many bug fixes and improvements
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Sat, 22 Aug 2026 13:09:12 +0200
+
 gearsystem (3.9.15-1) UNRELEASED; urgency=medium
 
   * Extensive Z80 accuracy improvements

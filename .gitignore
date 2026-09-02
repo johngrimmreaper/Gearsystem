@@ -50,6 +50,9 @@ desktop.ini
 *.cfg
 *.gg
 *.sms
+*.sg
+*.mv
+*.rom
 *.bin
 *.zip
 *.gearsystem
@@ -57,6 +60,8 @@ desktop.ini
 *.sav
 *.tmp
 *.state*
+docs/
+tests/
 
 # Qt Ignores
 moc_*.cpp
@@ -73,9 +78,12 @@ xcuserdata/
 *.xcexplist
 *.xcsettings
 *.xccheckout
+platforms/ios/Support/ThumbnailKeys.local.xcconfig
 
 #binaries
-platforms/**/gearsystem
+platforms/linux/**/gearsystem
+platforms/macos/**/gearsystem
+platforms/raspberry*/**/gearsystem
 
 #Switch
 *.a

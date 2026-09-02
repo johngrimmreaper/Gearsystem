@@ -21,6 +21,7 @@
 #define	VIDEO_H
 
 #include "definitions.h"
+#include "TraceLogger.h"
 
 class Memory;
 class Processor;
@@ -108,9 +109,15 @@ private:
     void ParseSpritesSMSGG(int line);
     void RenderSpritesSMSGG(int line);
     void RenderSpritesTMS9918(int line);
+    void RebuildGGPalette();
     void InitPalettes(const u8* src, u16* dest_565_rgb, u16* dest_555_rgb, u16* dest_565_bgr, u16* dest_555_bgr);
+    void InitOutputPalettes();
     int CalculateVideoMode();
     void CheckPhaser();
+    INLINE void UpdateGGPalette(int palette_color);
+    INLINE u16 CachedColorFromPalette(int palette_color);
+    INLINE void TraceVDPEvent(u8 event, u8 raw = 0, u8 effective = 0, u16 auxiliary = 0, u8 reg = 0, u8 status_before = 0, u8 status_after = 0, u16 address = 0xFFFF);
+    void LogVDPEvent(u8 event, u8 raw, u8 effective, u16 auxiliary, u8 reg, u8 status_before, u8 status_after, u16 address);
 
 private:
     Memory* m_pMemory;
@@ -124,6 +131,9 @@ private:
     u8 m_VdpRegister[16];
     u8 m_VdpCode;
     u8 m_VdpBuffer;
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    u16 m_VdpBufferAddress;
+#endif
     u16 m_VdpAddress;
     int m_iVCounter;
     int m_iHCounter;
@@ -205,8 +215,20 @@ private:
     u16 m_SG1000_palette_555_rgb_sg1000ii[16];
     u16 m_SG1000_palette_565_bgr_sg1000ii[16];
     u16 m_SG1000_palette_555_bgr_sg1000ii[16];
+    u16 m_GGPalette[32];
+    bool m_bGGPaletteExternalAccess;
     TraceLogger* m_pTraceLogger;
+    u32 m_SMSOutputPalette32[2][64];
+    u32 m_GGOutputPalette32[2][4096];
+    u16 m_SMSOutputPalette16[4][64];
+    u16 m_GGOutputPalette16[4][4096];
 };
+
+INLINE void Video::TraceVDPEvent(u8 event, u8 raw, u8 effective, u16 auxiliary, u8 reg, u8 status_before, u8 status_after, u16 address)
+{
+    if (m_pTraceLogger->IsEventEnabled(TRACE_VDP, event))
+        LogVDPEvent(event, raw, effective, auxiliary, reg, status_before, status_after, address);
+}
 
 inline u8* Video::GetVRAM()
 {
@@ -215,6 +237,7 @@ inline u8* Video::GetVRAM()
 
 inline u8* Video::GetCRAM()
 {
+    m_bGGPaletteExternalAccess = true;
     return m_pVdpCRAM;
 }
 
@@ -239,6 +262,20 @@ inline u16 Video::ColorFromPalette(int palette_color)
     {
         return m_pVdpCRAM[palette_color];
     }
+}
+
+INLINE void Video::UpdateGGPalette(int palette_color)
+{
+    int address = palette_color << 1;
+    m_GGPalette[palette_color] = m_pVdpCRAM[address] | ((m_pVdpCRAM[address + 1] & 0x0F) << 8);
+}
+
+INLINE u16 Video::CachedColorFromPalette(int palette_color)
+{
+    if (m_bGameGear && !m_bGameGearSMSMode)
+        return m_GGPalette[palette_color];
+    else
+        return m_pVdpCRAM[palette_color];
 }
 
 inline u16* Video::GetFrameBuffer()

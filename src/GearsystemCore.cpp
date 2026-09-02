@@ -91,6 +91,8 @@ GearsystemCore::GearsystemCore()
     InitPointer(m_pFrameBuffer);
     InitPointer(m_pIratahackMemoryRule);
     InitPointer(m_trace_logger);
+    m_master_clock_cycles = 0;
+    m_geartogear_cycles = 0;
     m_bPaused = true;
     m_pixelFormat = GS_PIXEL_RGBA8888;
     m_GlassesConfig = GearsystemCore::GlassesBothEyes;
@@ -143,11 +145,10 @@ void GearsystemCore::Init(GS_Color_Format pixelFormat)
     m_pMemory = new Memory(m_pCartridge);
     m_pProcessor = new Processor(m_pMemory);
     m_pVideo = new Video(m_pMemory, m_pProcessor, m_pCartridge);
-    m_pInput = new Input(m_pProcessor, m_pVideo);
+    m_pInput = new Input(m_pProcessor, m_pVideo, &m_master_clock_cycles);
     m_pAudio = new Audio(m_pCartridge);
     m_pSmsIOPorts = new SmsIOPorts(m_pAudio, m_pVideo, m_pInput, m_pCartridge, m_pMemory, m_pProcessor);
-    m_pGameGearIOPorts = new GameGearIOPorts(m_pAudio, m_pVideo, m_pInput, m_pCartridge, m_pMemory);
-    m_trace_logger = new TraceLogger();
+    m_pGameGearIOPorts = new GameGearIOPorts(m_pAudio, m_pVideo, m_pInput, m_pCartridge, m_pMemory, m_pProcessor);
 
     m_pMemory->Init();
     m_pProcessor->Init();
@@ -156,15 +157,20 @@ void GearsystemCore::Init(GS_Color_Format pixelFormat)
     m_pInput->Init();
     m_pCartridge->Init();
 
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    m_trace_logger = new TraceLogger(&m_master_clock_cycles);
     m_pProcessor->SetTraceLogger(m_trace_logger);
     m_pVideo->SetTraceLogger(m_trace_logger);
+    m_pAudio->SetTraceLogger(m_trace_logger);
+    m_pInput->SetTraceLogger(m_trace_logger);
     m_pSmsIOPorts->SetTraceLogger(m_trace_logger);
     m_pGameGearIOPorts->SetTraceLogger(m_trace_logger);
+#endif
 
     InitMemoryRules();
 }
 
-bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSampleCount, GS_Debug_Run* debug)
+bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSampleCount, GS_Debug_Run* debug, bool render)
 {
     m_pFrameBuffer = pFrameBuffer;
 
@@ -184,11 +190,20 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
 
         do
         {
+            u64 link_start_cycle = m_geartogear_cycles;
+            if (IsNativeGameGearMode())
+                m_pGameGearIOPorts->BeginInstruction(link_start_cycle);
+
             unsigned int clockCycles = debug_enable && debug->step_debugger ? m_pProcessor->RunInstruction() : m_pProcessor->RunFor(1);
             instruction_completed = true;
+            m_master_clock_cycles += clockCycles;
+            m_geartogear_cycles += clockCycles;
+
+            if (IsNativeGameGearMode())
+                m_pGameGearIOPorts->EndInstruction(m_geartogear_cycles);
+
             vblank = m_pVideo->Tick(clockCycles);
             m_pAudio->Tick(clockCycles);
-            m_master_clock_cycles += clockCycles;
             totalClocks += clockCycles;
 
             if (debug_enable)
@@ -215,7 +230,8 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
         while (!vblank);
 
         m_pAudio->EndFrame(pSampleBuffer, pSampleCount);
-        RenderFrameBuffer(pFrameBuffer);
+        if (render)
+            RenderFrameBuffer(pFrameBuffer);
 
         return m_pProcessor->BreakpointHit() || m_pProcessor->RunToBreakpointHit();
 #else
@@ -225,10 +241,19 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
 
         do
         {
+            u64 link_start_cycle = m_geartogear_cycles;
+            if (IsNativeGameGearMode())
+                m_pGameGearIOPorts->BeginInstruction(link_start_cycle);
+
             unsigned int clockCycles = m_pProcessor->RunFor(1);
+            m_master_clock_cycles += clockCycles;
+            m_geartogear_cycles += clockCycles;
+
+            if (IsNativeGameGearMode())
+                m_pGameGearIOPorts->EndInstruction(m_geartogear_cycles);
+
             vblank = m_pVideo->Tick(clockCycles);
             m_pAudio->Tick(clockCycles);
-            m_master_clock_cycles += clockCycles;
             totalClocks += clockCycles;
 
             if (totalClocks > 702240)
@@ -237,7 +262,8 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
         while (!vblank);
 
         m_pAudio->EndFrame(pSampleBuffer, pSampleCount);
-        RenderFrameBuffer(pFrameBuffer);
+        if (render)
+            RenderFrameBuffer(pFrameBuffer);
 
         return false;
 #endif
@@ -246,9 +272,9 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
     return false;
 }
 
-bool GearsystemCore::LoadROM(const char* szFilePath, Cartridge::ForceConfiguration* config)
+bool GearsystemCore::LoadROM(const char* szFilePath, Cartridge::ForceConfiguration* config, bool softpatching)
 {
-    if (m_pCartridge->LoadFromFile(szFilePath))
+    if (m_pCartridge->LoadFromFile(szFilePath, softpatching))
     {
         if (IsValidPointer(config))
             m_pCartridge->ForceConfig(*config);
@@ -259,7 +285,12 @@ bool GearsystemCore::LoadROM(const char* szFilePath, Cartridge::ForceConfigurati
 
         m_pProcessor->DisassembleNextOPCode();
 
-        if (!romTypeOK)
+        if (!romTypeOK && m_pCartridge->IsSoftpatchApplied())
+        {
+            Error("Media rejected after applying IPS patch %s. Loading unpatched media.", m_pCartridge->GetSoftpatchPath());
+            return LoadROM(szFilePath, config, false);
+        }
+        else if (!romTypeOK)
         {
             Log("There was a problem with the cartridge header. File: %s...", szFilePath);
         }
@@ -347,6 +378,12 @@ void GearsystemCore::SaveDisassembledROM()
 
 bool GearsystemCore::GetRuntimeInfo(GS_RuntimeInfo& runtime_info)
 {
+    bool pal = m_pCartridge->IsPAL();
+    double master_clock = pal ? (m_pCartridge->IsSG1000() ? GS_MASTER_CLOCK_PAL_SG1000 : GS_MASTER_CLOCK_PAL) : GS_MASTER_CLOCK_NTSC;
+    int lines_per_frame = pal ? GS_LINES_PER_FRAME_PAL : GS_LINES_PER_FRAME_NTSC;
+
+    runtime_info.fps = master_clock / (GS_CYCLES_PER_LINE * lines_per_frame);
+
     if (m_pCartridge->IsReady())
     {
         if (m_pCartridge->IsGameGear() && !m_pCartridge->IsGameGearInSMSMode())
@@ -418,6 +455,49 @@ u64 GearsystemCore::GetMasterClockCycles()
     return m_master_clock_cycles;
 }
 
+void GearsystemCore::SetMasterClockCycles(u64 cycles)
+{
+    m_master_clock_cycles = cycles;
+}
+
+void GearsystemCore::SetGearToGearCallbacks(
+    GS_GearToGear_Publish_Callback publish_callback,
+    GS_GearToGear_Sample_Callback sample_callback,
+    GS_GearToGear_Poll_Callback poll_callback,
+    GS_GearToGear_Fence_Callback fence_callback,
+    GS_GearToGear_Sync_Callback sync_callback,
+    void* user_data)
+{
+    m_pGameGearIOPorts->SetGearToGearCallbacks(publish_callback,
+        sample_callback, poll_callback, fence_callback, sync_callback, user_data);
+}
+
+void GearsystemCore::SetGearToGearTransportActive(bool active, u64 cycle)
+{
+    m_pGameGearIOPorts->SetGearToGearTransportActive(active, cycle);
+}
+
+void GearsystemCore::SetGearToGearCableConnected(bool connected, u64 cycle)
+{
+    m_pGameGearIOPorts->SetGearToGearCableConnected(connected, cycle);
+}
+
+bool GearsystemCore::IsNativeGameGearMode() const
+{
+    return m_pCartridge->IsReady() && m_pCartridge->IsGameGear() &&
+        !m_pCartridge->IsGameGearInSMSMode();
+}
+
+u64 GearsystemCore::GetGearToGearCycles() const
+{
+    return m_geartogear_cycles;
+}
+
+GameGearIOPorts* GearsystemCore::GetGameGearIOPorts()
+{
+    return m_pGameGearIOPorts;
+}
+
 TraceLogger* GearsystemCore::GetTraceLogger()
 {
     return m_trace_logger;
@@ -487,15 +567,25 @@ void GearsystemCore::EnablePaddle(bool enable)
     m_pInput->EnablePaddle(enable);
 }
 
+void GearsystemCore::MoveSportsPad(GS_Joypads joypad, float x, float y)
+{
+    m_pInput->MoveSportsPad(joypad, x, y);
+}
+
+void GearsystemCore::EnableSportsPad(GS_Joypads joypad, bool enable)
+{
+    m_pInput->EnableSportsPad(joypad, enable);
+}
+
 void GearsystemCore::Pause(bool paused)
 {
     if (paused)
     {
-        Log("Gearsystem PAUSED");
+        Log(GS_TITLE " PAUSED");
     }
     else
     {
-        Log("Gearsystem RESUMED");
+        Log(GS_TITLE " RESUMED");
     }
     m_bPaused = paused;
 }
@@ -509,7 +599,7 @@ void GearsystemCore::ResetROM(Cartridge::ForceConfiguration* config)
 {
     if (m_pCartridge->IsReady())
     {
-        Log("Gearsystem RESET");
+        Log(GS_TITLE " RESET");
         if (IsValidPointer(config))
             m_pCartridge->ForceConfig(*config);
         Reset();
@@ -1011,11 +1101,11 @@ bool GearsystemCore::LoadState(std::istream& stream)
     m_pProcessor->LoadState(stream, header.version);
     m_pAudio->LoadState(stream, header.version);
     m_pVideo->LoadState(stream, header.version);
-    m_pInput->LoadState(stream);
+    m_pInput->LoadState(stream, header.version);
     m_pMemory->GetCurrentRule()->LoadState(stream, header.version);
     if (header.version >= 104)
         m_pMemory->GetBootromRule()->LoadState(stream, header.version);
-    m_pProcessor->GetIOPOrts()->LoadState(stream);
+    m_pProcessor->GetIOPOrts()->LoadState(stream, header.version);
 
     return true;
 }
@@ -1068,9 +1158,9 @@ bool GearsystemCore::LoadStateV1(std::istream& stream, size_t size)
     m_pProcessor->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pAudio->LoadStateV1(stream);
     m_pVideo->LoadState(stream);
-    m_pInput->LoadState(stream);
+    m_pInput->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pMemory->GetCurrentRule()->LoadState(stream, GS_SAVESTATE_VERSION_V1);
-    m_pProcessor->GetIOPOrts()->LoadState(stream);
+    m_pProcessor->GetIOPOrts()->LoadState(stream, GS_SAVESTATE_VERSION_V1);
 
     return true;
 }
@@ -1425,7 +1515,7 @@ void GearsystemCore::Reset()
     m_pProcessor->Reset(m_pCartridge->GetGameGearASIC() == 1);
     m_pAudio->Reset(m_pCartridge->IsPAL());
     m_pVideo->Reset(m_pCartridge->IsGameGear(), m_pCartridge->IsPAL(), m_pCartridge->GetGameGearASIC(), m_pCartridge->IsGameGearInSMSMode());
-    m_pInput->Reset(m_pCartridge->IsGameGear());
+    m_pInput->Reset(m_pCartridge->IsGameGear(), m_pCartridge->IsPAL(), m_pCartridge->IsGameGearInSMSMode());
     m_pSegaMemoryRule->Reset();
     m_pCodemastersMemoryRule->Reset();
     m_pSG1000MemoryRule->Reset();
@@ -1451,6 +1541,7 @@ void GearsystemCore::Reset()
     m_pEeprom93C46MemoryRule->Reset();
     m_pBootromMemoryRule->Reset();
     m_pGameGearIOPorts->Reset();
+    m_pGameGearIOPorts->RebaseGearToGear(m_geartogear_cycles);
     m_pSmsIOPorts->Reset();
     m_bPaused = false;
     m_master_clock_cycles = 0;

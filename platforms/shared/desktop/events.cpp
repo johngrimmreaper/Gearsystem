@@ -126,21 +126,38 @@ void events_handle_emu_event(const SDL_Event* event)
                 emu_set_paddle(relx);
             }
 
+            if (config_emulator.sports_pad && ((event->motion.xrel != 0.0f) || (event->motion.yrel != 0.0f)))
+            {
+                int sen = config_emulator.sports_pad_sensitivity;
+                if (sen < 1)
+                    sen = 1;
+
+                float sensitivity = (float)sen / 25.0f;
+                emu_move_sports_pad(event->motion.xrel * sensitivity, event->motion.yrel * sensitivity);
+            }
+
             break;
         }
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         {
-            if ((config_emulator.light_phaser || config_emulator.paddle_control) && gui_main_window_hovered)
+            if ((config_emulator.light_phaser || config_emulator.paddle_control || config_emulator.sports_pad) && gui_main_window_hovered)
             {
                 if (event->button.button == SDL_BUTTON_LEFT)
                     emu_key_pressed(Joypad_1, Key_1);
+                else if (config_emulator.sports_pad && (event->button.button == SDL_BUTTON_RIGHT))
+                    emu_key_pressed(Joypad_1, Key_2);
             }
             break;
         }
         case SDL_EVENT_MOUSE_BUTTON_UP:
         {
-            if ((config_emulator.light_phaser || config_emulator.paddle_control) && event->button.button == SDL_BUTTON_LEFT)
-                emu_key_released(Joypad_1, Key_1);
+            if (config_emulator.light_phaser || config_emulator.paddle_control || config_emulator.sports_pad)
+            {
+                if (event->button.button == SDL_BUTTON_LEFT)
+                    emu_key_released(Joypad_1, Key_1);
+                else if (config_emulator.sports_pad && (event->button.button == SDL_BUTTON_RIGHT))
+                    emu_key_released(Joypad_1, Key_2);
+            }
 
             break;
         }
@@ -258,12 +275,12 @@ static Uint16 input_build_state(int controller)
         // Use analog sticks
         else
         {
-            const Sint16 STICK_DEAD_ZONE = 8000;
-            const Sint16 rawx = SDL_GetGamepadAxis(sdl_controller, (SDL_GamepadAxis)config_input[controller].gamepad_x_axis);
-            const Sint16 rawy = SDL_GetGamepadAxis(sdl_controller, (SDL_GamepadAxis)config_input[controller].gamepad_y_axis);
+            const int STICK_DEAD_ZONE = 8000;
+            const int rawx = SDL_GetGamepadAxis(sdl_controller, (SDL_GamepadAxis)config_input[controller].gamepad_x_axis);
+            const int rawy = SDL_GetGamepadAxis(sdl_controller, (SDL_GamepadAxis)config_input[controller].gamepad_y_axis);
 
-            const Sint16 x = config_input[controller].gamepad_invert_x_axis ? -rawx : rawx;
-            const Sint16 y = config_input[controller].gamepad_invert_y_axis ? -rawy : rawy;
+            const int x = config_input[controller].gamepad_invert_x_axis ? -rawx : rawx;
+            const int y = config_input[controller].gamepad_invert_y_axis ? -rawy : rawy;
 
             if (x < -STICK_DEAD_ZONE)
                 ret |= Key_Left;
