@@ -32,6 +32,7 @@
 #include "SixteenBitRegister.h"
 #include "MemoryRule.h"
 #include "TraceLogger.h"
+#include "Profiler.h"
 
 #endif	/* GEARSYSTEM_H */
 

@@ -2,9 +2,11 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io/introduction) server for the Gearsystem emulator, enabling AI-assisted debugging and development of Sega Master System / Game Gear / SG-1000 games.
 
-This server provides tools for game development, rom hacking, reverse engineering, and debugging through standardized MCP protocols compatible with AI agents like GitHub Copilot, Claude, Codex and others.
+This server provides tools for game development, rom hacking, reverse engineering, and debugging through standardized MCP protocols compatible with AI agents like Claude Code, Codex and others.
 
 ## Downloads
+
+These MCP Bundles (`.mcpb`) package Gearsystem with its MCP server configuration for MCP clients that install bundles, and are the packages published to the [MCP Registry](https://registry.modelcontextprotocol.io/). Claude Code and Codex use a regular Gearsystem build instead, see [Quick Start](#quick-start).
 
 <table>
   <thead>
@@ -18,29 +20,29 @@ This server provides tools for game development, rom hacking, reverse engineerin
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-windows-x64.mcpb">Gearsystem-3.9.18-mcpb-windows-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-mcpb-windows-x64.mcpb">Gearsystem-3.9.26-mcpb-windows-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-windows-arm64.mcpb">Gearsystem-3.9.18-mcpb-windows-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-mcpb-windows-arm64.mcpb">Gearsystem-3.9.26-mcpb-windows-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>macOS</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-macos-x64.mcpb">Gearsystem-3.9.18-mcpb-macos-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-mcpb-macos-x64.mcpb">Gearsystem-3.9.26-mcpb-macos-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-macos-arm64.mcpb">Gearsystem-3.9.18-mcpb-macos-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-mcpb-macos-arm64.mcpb">Gearsystem-3.9.26-mcpb-macos-arm64.mcpb</a></td>
     </tr>
     <tr>
       <td rowspan="2"><strong>Linux</strong></td>
       <td>x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-linux-x64.mcpb">Gearsystem-3.9.18-mcpb-linux-x64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-mcpb-linux-x64.mcpb">Gearsystem-3.9.26-mcpb-linux-x64.mcpb</a></td>
     </tr>
     <tr>
       <td>ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-mcpb-linux-arm64.mcpb">Gearsystem-3.9.18-mcpb-linux-arm64.mcpb</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-mcpb-linux-arm64.mcpb">Gearsystem-3.9.26-mcpb-linux-arm64.mcpb</a></td>
     </tr>
   </tbody>
 </table>
@@ -50,15 +52,17 @@ This server provides tools for game development, rom hacking, reverse engineerin
 - **Full Debugger Access**: CPU registers, memory inspection, breakpoints, and execution control
 - **Multiple Memory Areas**: Access RAM, VRAM, CRAM, ROM banks, external RAM, BIOS, and more
 - **Disassembly**: View disassembled Z80 code around PC or any address
-- **Hardware Inspection**: Z80 CPU, VDP, PSG, YM2413 FM synthesis, and Game Gear link cable
+- **Hardware Inspection**: Z80 CPU, VDP, PSG, YM2413 FM synthesis, and Gear-to-Gear and Mark III link cables
 - **Sprite Viewer**: List and inspect all 64 sprites with images
 - **Symbol Support**: Add, remove, list, and look up debug symbols
 - **Input State**: Inspect effective pressed buttons and pending tap releases
 - **Bookmarks**: Memory and disassembler bookmarks for navigation
 - **Call Stack**: View function call hierarchy
 - **Trace Logger**: CPU instructions, VDP, input, I/O, PSG, YM2413, mapper, EEPROM, and flash events
+- **Profiler**: Per-function call counts, calls per frame, and inclusive/exclusive cycle statistics
 - **Rewind**: Time-travel debugging with snapshot status and seek tools
 - **Screenshot Capture**: Get current frame as PNG image
+- **Video Recording**: Record emulated video and audio to AVI files on disk
 - **GUI Integration**: MCP server runs alongside the emulator GUI, sharing the same state
 
 ## Transport Modes
@@ -76,6 +80,14 @@ The HTTP transport mode runs the emulator with an embedded web server on `127.0.
 ### Headless Mode
 
 Add `--headless` to run without a GUI window. This is useful for servers, CLI agents, or any machine without a display. All MCP tools work identically in headless mode. Requires `--mcp-stdio` or `--mcp-http`.
+
+A save state can be loaded at launch too, with `--load-state 1` for slot 1 or `--load-state FILE` for a state file; run `gearsystem --help` for the full list.
+
+Headless mode is debug mode without rendering, so the debug output settings apply: screenshots use the output overscan and hide left bar settings from the **Debug** menu instead of the ones in the **Video** menu. By default, overscan is disabled and the left bar is shown. Headless instances read these settings from the configuration file, so set them in the GUI with debug enabled. The same settings apply when the MCP server runs alongside the GUI, because MCP always runs in debug mode.
+
+### Pause When Inactive
+
+While the MCP server is running, the emulator keeps running when its window loses focus, even with **Pause When Inactive** enabled in the **Emulator** menu. The setting keeps its value and applies again once the server stops.
 
 ### Concurrent Clients
 
@@ -118,17 +130,25 @@ Without `--mcp-router`, call every MCP tool directly.
 
 ## Quick Start
 
-### STDIO Mode with VS Code
+Get a desktop build of Gearsystem from the [downloads](README.md#downloads) or [build it from source](README.md#build-instructions). In the examples below, replace `/path/to/gearsystem` with the full path to the executable:
 
-1. **Install [GitHub Copilot extension](https://code.visualstudio.com/docs/copilot/overview)** in VS Code
+- **macOS:** `/Applications/Gearsystem.app/Contents/MacOS/gearsystem`
+- **Linux:** `/path/to/gearsystem`
+- **Windows:** `C:/path/to/gearsystem.exe`
 
-2. **Configure VS Code settings**:
+### STDIO Mode with Claude Code
 
-   Add to your workspace folder a file named `.vscode/mcp.json` with:
+1. **Add the Gearsystem MCP server** using the CLI:
+
+   ```bash
+   claude mcp add --transport stdio --scope user gearsystem -- /path/to/gearsystem --mcp-stdio
+   ```
+
+   Everything after `--` is passed to Gearsystem untouched. `--scope user` makes the server available in all your projects. Use `--scope local` (the default) to add it only to the current project, or `--scope project` to share it through a `.mcp.json` file in the project root:
 
    ```json
    {
-     "servers": {
+     "mcpServers": {
        "gearsystem": {
          "command": "/path/to/gearsystem",
          "args": ["--mcp-stdio"]
@@ -137,78 +157,43 @@ Without `--mcp-router`, call every MCP tool directly.
    }
    ```
 
-   **Important:** Update the `command` path to match your build location:
-   - **macOS:** `/path/to/gearsystem`
-   - **Linux:** `/path/to/gearsystem`
-   - **Windows:** `C:/path/to/gearsystem.exe`
-
-3. **Restart VS Code** may be necessary for settings to take effect
-
-4. **Open GitHub Copilot Chat** and start debugging:
-   - The emulator will auto-start with MCP server enabled
-   - Load a game ROM
-   - Start chatting with Copilot about the game state
-
-### STDIO Mode with Claude Desktop
-
-#### Option 1: Desktop Extension (Recommended)
-
-The easiest way to install Gearsystem MCP server on Claude Desktop is using the MCPB package:
-
-1. **Download the latest MCPB package** for your platform from the [releases page](https://github.com/drhelius/gearsystem/releases).
-
-2. **Install the extension**:
-   - Open Claude Desktop
-   - Navigate to **Settings > Extensions**
-   - Click **Advanced settings**
-   - In the Extension Developer section, click **Install Extension…**
-   - Select the downloaded `.mcpb` file
-
-3. **Start debugging**: The extension is now available in your conversations. The emulator will automatically launch when the tool is enabled.
-
-#### Option 2: Manual Configuration
-
-If you prefer to build from source or configure manually:
-
-1. **Edit Claude Desktop config file**:
-
-   Follow [these instructions](https://modelcontextprotocol.io/quickstart/user#for-claude-desktop-users) to access Claude's config file, then edit it to include:
-
-   ```json
-   {
-     "mcpServers": {
-       "gearsystem": {
-         "command": "/path/to/gearsystem/platforms/macos/gearsystem",
-         "args": ["--mcp-stdio"]
-       }
-     }
-   }
-   ```
-
-   **Config file locations:**
-   - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-   - **Linux:** `~/.config/Claude/claude_desktop_config.json`
-
-   **Important:** Update the `command` path to match your build location.
-
-2. **Restart Claude Desktop**
-
-### STDIO Mode with Claude Code
-
-1. **Add the Gearsystem MCP server** using the CLI:
-   ```bash
-   claude mcp add --transport stdio gearsystem -- /path/to/gearsystem --mcp-stdio
-   ```
-
-   **Important:** Update the path to match your build location.
+   Claude Code asks for approval the first time it uses a server from `.mcp.json`.
 
 2. **Verify the server was added**:
+
    ```bash
    claude mcp list
    ```
 
-3. **Start debugging**: Open Claude Code and start chatting about the game state. The emulator will auto-start when tools are invoked.
+3. **Start debugging**: Start Claude Code and ask about the game state. Gearsystem launches when the session starts. Run `/mcp` inside Claude Code to check the server status or reconnect it.
+
+### STDIO Mode with Codex
+
+The Codex CLI, IDE extension, and desktop app share the same MCP configuration, so you only need to add the server once.
+
+1. **Add the Gearsystem MCP server** using the CLI:
+
+   ```bash
+   codex mcp add gearsystem -- /path/to/gearsystem --mcp-stdio
+   ```
+
+   Or add it to `~/.codex/config.toml`:
+
+   ```toml
+   [mcp_servers.gearsystem]
+   command = "/path/to/gearsystem"
+   args = ["--mcp-stdio"]
+   ```
+
+   To use the server only in one project, add the same table to `.codex/config.toml` in that project. Codex loads project configuration only for trusted projects. In TOML, write Windows paths with forward slashes or in single quotes.
+
+2. **Verify the server was added**:
+
+   ```bash
+   codex mcp list
+   ```
+
+3. **Start debugging**: Start Codex and ask about the game state. Gearsystem launches when the session starts. Type `/mcp` in the Codex CLI to see the active servers.
 
 ### HTTP Mode
 
@@ -216,67 +201,64 @@ If you prefer to build from source or configure manually:
 
    ```bash
    ./gearsystem --mcp-http
-  ```
+   ```
 
-  The default endpoint is `http://127.0.0.1:7777/mcp`.
+   The default endpoint is `http://127.0.0.1:7777/mcp`.
 
-  To use a custom port:
+   To use a custom port:
 
-  ```bash
+   ```bash
    ./gearsystem --mcp-http --mcp-http-port 3000
-  ```
+   ```
 
-  To bind to a custom address, set a bearer token first:
+   To bind to a custom address, set a bearer token first:
 
-  ```bash
-  GEARSYSTEM_MCP_HTTP_TOKEN="change-this-token" ./gearsystem --mcp-http --mcp-http-address 0.0.0.0 --mcp-http-port 3000
-  ```
+   ```bash
+   GEARSYSTEM_MCP_HTTP_TOKEN="change-this-token" ./gearsystem --mcp-http --mcp-http-address 0.0.0.0 --mcp-http-port 3000
+   ```
 
-  Clients must connect using the server's actual interface address, such as `http://192.168.1.50:3000/mcp`, not `0.0.0.0` or a spoofed loopback address.
+   Clients must connect using the server's actual interface address, such as `http://192.168.1.50:3000/mcp`, not `0.0.0.0` or a spoofed loopback address.
 
-  You can also start the server using the "MCP" menu in the GUI.
+   You can also start the server using the "MCP" menu in the GUI.
 
 2. **Configure bearer-token authentication**:
 
-  Set `GEARSYSTEM_MCP_HTTP_TOKEN` before starting HTTP mode. Authentication is optional for loopback binds and required for wildcard or other non-loopback binds.
+   Set `GEARSYSTEM_MCP_HTTP_TOKEN` before starting HTTP mode. Authentication is optional for loopback binds and required for wildcard or other non-loopback binds.
 
-  macOS and Linux:
+   macOS and Linux:
 
-  ```bash
-  GEARSYSTEM_MCP_HTTP_TOKEN="change-this-token" ./gearsystem --mcp-http
-  ```
-
-  Windows PowerShell:
-
-  ```powershell
-  $env:GEARSYSTEM_MCP_HTTP_TOKEN = "change-this-token"
-  .\gearsystem.exe --mcp-http
-  ```
-
-  Windows Command Prompt:
-
-  ```cmd
-  set GEARSYSTEM_MCP_HTTP_TOKEN=change-this-token
-  gearsystem.exe --mcp-http
+   ```bash
+   GEARSYSTEM_MCP_HTTP_TOKEN="change-this-token" ./gearsystem --mcp-http
    ```
 
-3. **Configure VS Code** `.vscode/mcp.json`:
+   Windows PowerShell:
 
-   ```json
-   {
-     "servers": {
-       "gearsystem": {
-         "type": "http",
-         "url": "http://127.0.0.1:7777/mcp",
-         "headers": {
-           "Authorization": "Bearer change-this-token"
-         }
-       }
-     }
-   }
+   ```powershell
+   $env:GEARSYSTEM_MCP_HTTP_TOKEN = "change-this-token"
+   .\gearsystem.exe --mcp-http
    ```
 
-4. **Or configure Claude Desktop**:
+   Windows Command Prompt:
+
+   ```cmd
+   set GEARSYSTEM_MCP_HTTP_TOKEN=change-this-token
+   gearsystem.exe --mcp-http
+   ```
+
+3. **Configure Claude Code**:
+
+   ```bash
+   claude mcp add --transport http --scope user gearsystem http://127.0.0.1:7777/mcp
+   ```
+
+   If the server uses a bearer token, add the header:
+
+   ```bash
+   claude mcp add --transport http --scope user gearsystem http://127.0.0.1:7777/mcp \
+     --header "Authorization: Bearer change-this-token"
+   ```
+
+   In a shared `.mcp.json`, read the token from the environment instead of committing it:
 
    ```json
    {
@@ -285,20 +267,34 @@ If you prefer to build from source or configure manually:
          "type": "http",
          "url": "http://127.0.0.1:7777/mcp",
          "headers": {
-           "Authorization": "Bearer change-this-token"
+           "Authorization": "Bearer ${GEARSYSTEM_MCP_HTTP_TOKEN}"
          }
        }
      }
    }
    ```
 
-5. **Or configure Claude Code**:
+4. **Or configure Codex**:
 
    ```bash
-  claude mcp add --transport http gearsystem http://127.0.0.1:7777/mcp
+   codex mcp add gearsystem --url http://127.0.0.1:7777/mcp
    ```
 
-6. **Restart your AI client** and start debugging
+   If the server uses a bearer token, Codex reads it from an environment variable, so set `GEARSYSTEM_MCP_HTTP_TOKEN` in the environment where Codex runs too:
+
+   ```bash
+   codex mcp add gearsystem --url http://127.0.0.1:7777/mcp --bearer-token-env-var GEARSYSTEM_MCP_HTTP_TOKEN
+   ```
+
+   The equivalent `~/.codex/config.toml` entry:
+
+   ```toml
+   [mcp_servers.gearsystem]
+   url = "http://127.0.0.1:7777/mcp"
+   bearer_token_env_var = "GEARSYSTEM_MCP_HTTP_TOKEN"
+   ```
+
+5. **Start a new Claude Code or Codex session** and start debugging
 
 > **Note:** The MCP HTTP Server must be running standalone before connecting the AI client.
 > **Security:** Without `GEARSYSTEM_MCP_HTTP_TOKEN`, HTTP mode starts only on a loopback address. Wildcard and other non-loopback binds are refused. `Host` and browser `Origin` values are matched to the connection's actual destination address to prevent DNS rebinding and address spoofing.
@@ -317,6 +313,7 @@ Once configured, you can ask your AI assistant:
 - "Pause execution and show me all sprites"
 - "Step through the next 5 instructions"
 - "Capture a screenshot of the current frame"
+- "Record a video of the next 600 frames to /path/to/clip.avi"
 - "Tap the up button on player 1 controller"
 
 ### Advanced Debugging Workflows
@@ -326,6 +323,7 @@ Once configured, you can ask your AI assistant:
 - "There's a data decompression routine around address 0x8000. Step through it instruction by instruction, reverse engineer the compression algorithm, and explain how it works with examples"
 - "Find where the game stores its level data in ROM. Analyze the data structure format, create a memory map showing each section, and add symbols for the data tables"
 - "The game is rendering corrupted graphics. Examine the VDP registers, check the VRAM contents, inspect the sprite attribute table, and diagnose what's causing the corruption. Set up watches on relevant memory addresses"
+- "Profile the game for a few seconds, then tell me which functions use the most CPU time per frame and what they do"
 
 ## Available MCP Tools
 
@@ -379,7 +377,11 @@ The server exposes tools organized in the following categories:
 - `get_trace_log` - Read retained entries using absolute sequence pagination. Results include `total_entries`, monotonic `total_logged`, `oldest_sequence`, actual `start`, `next_sequence`, `count`, `overrun`, and formatted `lines`. Omit `start` for the latest 100 retained entries, or use a negative value to start that many entries from the retained tail; expired starts clamp to the oldest retained entry with `overrun=true`
 - `set_trace_log` - Start, stop, or reconfigure shared GUI/MCP capture. `output` is `memory` or `disk`; `memory_size` is `100K`, `500K`, `1M`, `2M`, or `5M`; `disk_size` is `10MB`, `50MB`, `100MB`, `250MB`, `500MB`, `1GB`, or `unbounded`; `output_path` is a directory. Omitting `filters` selects CPU instructions and interrupts
 
-Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `vdp.interrupts`, `vdp.status`, `vdp.sprites`, `vdp.state`, `vdp.data`, `vdp.cram`, `input.reads`, `input.changes`, `io.control`, `io.counters`, `io.gamegear`, `geartogear.cable`, `geartogear.transfers`, `geartogear.interrupts`, `geartogear.wire`, `psg.tone`, `psg.volume`, `psg.noise`, `psg.stereo`, `ym2413.registers`, `ym2413.mixer`, `mapper.rom`, `mapper.ram`, `mapper.control`, `mapper.eeprom`, and `mapper.flash`. Trace cycle values are Z80 T-states, and a `RESET` marker denotes a reset clock discontinuity while absolute sequence identity remains monotonic.
+Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `vdp.interrupts`, `vdp.status`, `vdp.sprites`, `vdp.sprite_budget`, `vdp.sprite_limit`, `vdp.missed_vblank`, `vdp.state`, `vdp.data`, `vdp.cram`, `input.reads`, `input.changes`, `io.control`, `io.counters`, `io.gamegear`, `geartogear.cable`, `geartogear.transfers`, `geartogear.interrupts`, `geartogear.wire`, `psg.tone`, `psg.volume`, `psg.noise`, `psg.stereo`, `ym2413.registers`, `ym2413.mixer`, `mapper.rom`, `mapper.ram`, `mapper.control`, `mapper.eeprom`, and `mapper.flash`. `vdp.sprite_budget` records one entry per active line with the number of sprites on that line against the per-line limit (8 in Mode 4, 4 in TMS9918 modes), flagging lines that hit the limit and how many sprites were dropped; `vdp.sprite_limit` records only the lines that hit the limit. Unlike `vdp.sprites`, which only reports when the overflow status flag gets set, these streams report every line. `vdp.missed_vblank` logs each frame where the CPU access set with `vblank_watch_address` (hex) and `vblank_watch_operation` (`read`, `write`, or `read_write`) did not happen before the VBlank interrupt flag was set, with the number of consecutive misses; the first VBlank after starting, changing the watch, resetting, or loading a state only arms the check. Both parameters persist and keep their current values when omitted. Trace cycle values are Z80 T-states, and a `RESET` marker denotes a reset clock discontinuity while absolute sequence identity remains monotonic.
+
+### Profiler
+- `set_profiler` - Start, stop, or reset the function profiler with `action` (`start`, `stop`, `reset`). `start` opens the Profiler debugger window and `stop` closes it. Statistics are only collected while the window is visible (in headless mode, while started), starting on the next frame
+- `get_profiler_data` - Read profiler results: `collecting`, `window_open`, `total_cycles`, `frame_cycles`, `frames`, `function_count`, and per-function `name`, `symbol`, `bank`, `address`, `type`, `calls`, `calls_per_frame`, `inclusive_cycles`, `inclusive_percent`, `exclusive_cycles`, `exclusive_percent`, `average_cycles`, `min_cycles`, and `max_cycles`. Optional `sort` (`inclusive`, `exclusive`, `calls`, `average`, `max`; highest first), `count` (default 50, max 1000), and `filter` (name or hex address substring)
 
 ### Breakpoints
 - `set_breakpoint` - Set execution, read, or write breakpoint (supports 4 memory areas: rom_ram, vram, cram, vdp_reg)
@@ -393,8 +395,8 @@ Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `
 - `get_vdp_status` - Get VDP status (flags, counters, mode, SG-1000 mode, extended mode 224)
 - `get_psg_status` - Get SN76489 PSG status for all 4 channels (3 tone + 1 noise): volume, period, frequency, GG stereo
 - `get_ym2413_status` - Get YM2413 FM synth status: 9 channels, instruments, key-on, f-number, block, envelope, rhythm mode, user instrument
-- `get_serial_status` - Get Game Gear serial registers and engine state, parallel/NMI state, physical pins, peer readiness, synchronization diagnostics, and Gear-to-Gear transport metrics
-- `reset_geartogear_metrics` - Reset Gear-to-Gear transport and stall diagnostics
+- `get_serial_status` - Get Gear-to-Gear serial/parallel state, Mark III PPI state, physical pins, peer readiness, synchronization diagnostics, and link cable transport metrics
+- `reset_link_cable_metrics` - Reset link cable transport and stall diagnostics
 
 ### Sprites
 - `list_sprites` - List all 64 sprites with position, size, pattern index
@@ -402,6 +404,8 @@ Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `
 
 ### Screen Capture
 - `get_screenshot` - Capture current screen frame as base64 PNG
+- `start_video_recording` - Start recording video and audio to an AVI file (MJPEG, uncompressed or PNG compressed video, 16-bit PCM audio). Only the resulting `file_path` is returned; the video stays on disk. Optional `file_path` (absolute; if omitted, an automatic name in the configured video recordings directory), `scale` (1-20), `aspect_ratio` (`screen`, `square`, `4:3`, `16:9`, `16:10`), and `quality` (`low`, `medium`, `high`, `lossless`, `lossless_compressed`). `lossless` is uncompressed; `lossless_compressed` stores PNG frames, much smaller but playable only with FFmpeg based players. Given options update the recording settings, same as the GUI menu. `screen` follows the display aspect ratio, which uses square pixels while debugging. When a shader preset is active outside debug mode, the shader output is recorded at the output window size and `scale` and `aspect_ratio` are ignored. Frames are recorded only while the emulator runs, so continue or step execution before stopping
+- `stop_video_recording` - Stop the active recording and finalize the AVI file. Returns `file_path` and the number of recorded `frames`
 
 ### Media & State Management
 - `get_media_info` - Get loaded ROM info (file path, type, size, mapper, zone, system)
@@ -419,8 +423,14 @@ Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `
 - `get_rewind_status` - Get rewind buffer status (enabled, snapshots, capacity, buffered seconds)
 - `rewind_seek` - Seek to a specific rewind snapshot while paused
 
+### Cheats
+- `list_cheats` - List cheats with index, code, description, enabled and valid state
+- `add_cheat` - Add an enabled Game Genie (`XXX-XXX[-XXX]`) or Pro Action Replay (`00AAAADD` or `AAAA:DD`, e.g. `C0E4:05`) cheat, join codes with `+`
+- `remove_cheat` - Remove a cheat by index
+
 ### Controller Input
 - `controller_button` - Control a button on a controller (player 1-2). Use action 'press' to hold the button, 'release' to let it go, or 'press_and_release' to simulate a quick tap. Buttons: up, down, left, right, 1, 2, start
+- `markiii_key` - Press or release one of the SK-1100 keys used by Mark III link software: 1, 2, space, or return
 - `controller_macro` - Run an ordered input macro. Top-level `player` defaults to 1, and each command may override it. Supported commands are `tap`, `press`, `release`, and `wait`; timing is explicit through `wait` frame counts
 - `get_input_state` - Get effective pressed buttons and pending tap releases
 
@@ -437,8 +447,8 @@ Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `
 ### STDIO Transport
 ```
 ┌─────────────────┐                    ┌──────────────────┐
-│   VS Code /     │       stdio        │   Gearsystem     │
-│ Claude Desktop  │◄──────────────────►│    MCP Server    │
+│  Claude Code /  │       stdio        │   Gearsystem     │
+│      Codex      │◄──────────────────►│    MCP Server    │
 │   (AI Client)   │       pipes        │  (background)    │
 └─────────────────┘                    └──────────────────┘
         │                                       │
@@ -455,8 +465,8 @@ Exact trace filters are `cpu.instructions`, `cpu.interrupts`, `vdp.registers`, `
 ### HTTP Transport
 ```
 ┌─────────────────┐                    ┌──────────────────┐
-│   VS Code /     │  HTTP (port 7777)  │   Gearsystem     │
-│ Claude Desktop  │◄──────────────────►│ MCP HTTP Server  │
+│  Claude Code /  │  HTTP (port 7777)  │   Gearsystem     │
+│      Codex      │◄──────────────────►│ MCP HTTP Server  │
 │   (AI Client)   │                    │    (listener)    │
 └─────────────────┘                    └──────────────────┘
                                                 │

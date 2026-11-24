@@ -53,6 +53,7 @@ enum Memory_Editor_Tabs
 };
 
 EXTERN void gui_debug_memory_init(void);
+EXTERN void gui_debug_memory_apply_settings(void);
 EXTERN void gui_debug_memory_destroy(void);
 EXTERN void gui_debug_memory_reset(void);
 EXTERN void gui_debug_window_memory(void);
@@ -71,7 +72,6 @@ EXTERN void gui_debug_memory_set_selection_value(int editor, u8 value);
 EXTERN void gui_debug_memory_add_bookmark(int editor, int address, const char* name);
 EXTERN void gui_debug_memory_remove_bookmark(int editor, int address);
 EXTERN bool gui_debug_memory_add_watch(int editor, int address, const char* notes, int size);
-EXTERN void gui_debug_memory_open_watch_popup(int editor, int address, const char* notes);
 EXTERN void gui_debug_memory_remove_watch(int editor, int address);
 EXTERN int gui_debug_memory_get_bookmarks(int editor, void** bookmarks_ptr);
 EXTERN int gui_debug_memory_get_watches(int editor, void** watches_ptr);

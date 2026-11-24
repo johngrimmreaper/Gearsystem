@@ -24,7 +24,15 @@
 #include <string>
 #include "gearsystem.h"
 
-static const int config_version = 8;
+#if defined(__APPLE__)
+#define CONFIG_PRIMARY_KMOD SDL_KMOD_GUI
+#define CONFIG_PRIMARY_LABEL "Cmd+"
+#else
+#define CONFIG_PRIMARY_KMOD SDL_KMOD_CTRL
+#define CONFIG_PRIMARY_LABEL "Ctrl+"
+#endif
+
+static const int config_version = 10;
 static const int config_minimum_version = 2;
 static const int config_max_recent_roms = 15;
 static const int config_memory_editor_count = 18;
@@ -80,11 +88,13 @@ struct config_Emulator
     int savestates_dir_option;
     std::string savestates_path;
     int screenshots_dir_option;
+    int video_recordings_dir_option;
     std::string screenshots_path;
-    std::string last_open_path;
+    std::string video_recordings_path;
     int window_width;
     int window_height;
-    bool status_messages;
+    bool show_notifications;
+    int notification_duration;
     bool allow_screensaver;
     bool light_phaser;
     bool light_phaser_crosshair;
@@ -97,10 +107,24 @@ struct config_Emulator
     bool sports_pad;
     int sports_pad_sensitivity;
     bool capture_mouse;
+    bool allow_shared_gamepads;
     int mcp_tcp_port;
     std::string mcp_http_address;
-    int geartogear_session;
-    int geartogear_stall_us;
+    int link_cable_session;
+    int link_cable_protocol;
+    int link_cable_stall_us;
+};
+
+struct config_FileDialogs
+{
+    std::string rom;
+    std::string ram;
+    std::string states;
+    std::string screenshots;
+    std::string recordings;
+    std::string debug;
+    std::string bios;
+    std::string cheats;
 };
 
 struct config_Video
@@ -118,6 +142,9 @@ struct config_Video
     int glasses;
     int shader_mode;
     std::string shader_preset_path;
+    int recording_scale;
+    int recording_ratio;
+    int recording_quality;
 };
 
 struct config_Audio
@@ -193,6 +220,7 @@ enum config_HotkeyIndex
     config_HotkeyIndex_SelectSlot4,
     config_HotkeyIndex_SelectSlot5,
     config_HotkeyIndex_Mute,
+    config_HotkeyIndex_VideoRecording,
     config_HotkeyIndex_COUNT
 };
 
@@ -217,6 +245,7 @@ struct config_Debug
     bool show_call_stack;
     bool show_breakpoints;
     bool show_symbols;
+    bool show_profiler;
     bool show_memory;
     bool show_video;
     bool show_video_nametable;
@@ -229,7 +258,8 @@ struct config_Debug
     bool show_trace_logger;
     bool show_geartogear_serial_registers;
     bool show_geartogear_serial_status;
-    bool show_geartogear_transport;
+    bool show_markiii_link;
+    bool show_link_cable_transport;
     bool show_rewind;
     bool trace_counter;
     bool trace_cycles;
@@ -254,6 +284,8 @@ struct config_Debug
     int trace_psg_events;
     int trace_ym2413_events;
     int trace_mapper_events;
+    int trace_vblank_watch_address;
+    int trace_vblank_watch_operation;
     int trace_output;
     int trace_capacity;
     int trace_disk_dir_option;
@@ -269,8 +301,11 @@ struct config_Debug
     bool dis_replace_labels;
     int dis_syntax;
     int dis_look_ahead_count;
+    int font_type;
     int font_size;
     int scale;
+    int overscan;
+    int hide_left_bar;
     bool multi_viewport;
     bool single_instance;
     bool auto_debug_settings;
@@ -282,6 +317,7 @@ struct config_Debug
 };
 
 EXTERN config_Emulator config_emulator;
+EXTERN config_FileDialogs config_file_dialogs;
 EXTERN config_Video config_video;
 EXTERN config_Audio config_audio;
 EXTERN config_Rewind config_rewind;

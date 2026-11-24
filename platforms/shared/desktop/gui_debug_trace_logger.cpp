@@ -22,6 +22,7 @@
 
 #include "imgui.h"
 #include "gui.h"
+#include "gui_notifications.h"
 #include "gui_filedialogs.h"
 #include "gui_debug_constants.h"
 #include "gui_debug_text.h"
@@ -37,6 +38,7 @@
 #include <sys/stat.h>
 
 static bool trace_logger_enabled = false;
+static const char* trace_logger_stop_reason = NULL;
 static int trace_logger_output = 0;
 static FILE* trace_logger_file = NULL;
 static char trace_logger_file_buffer[1024 * 1024];
@@ -63,6 +65,7 @@ static const u64 k_trace_logger_disk_sizes[] = {10ULL * 1024 * 1024, 50ULL * 102
 
 static void trace_logger_menu(void);
 static void trace_logger_sync_flags(void);
+static void trace_logger_sync_vblank_watch(bool enabled);
 static u32 trace_logger_get_config_flags(void);
 static void trace_logger_set_config_flags(u32 flags);
 static void trace_logger_menu_event_filter(const char* label, int* filter, u32 mask);
@@ -196,7 +199,7 @@ static bool trace_logger_apply_capacity(void)
         k_trace_logger_capacities[config_debug.trace_capacity];
     if (!logger->SetCapacity(capacity))
     {
-        gui_set_error_message("Unable to allocate the selected trace logger capacity.");
+        gui_notify(gui_NotificationError, NULL, "Unable to allocate the selected trace logger capacity");
         return false;
     }
     return true;
@@ -249,7 +252,7 @@ static bool trace_logger_start(u32 flags, bool update_config)
         if (!trace_logger_start_disk(NULL, error, sizeof(error)))
         {
             if (error[0])
-                gui_set_error_message(error);
+                gui_notify(gui_NotificationError, NULL, error);
             return false;
         }
     }
@@ -257,11 +260,13 @@ static bool trace_logger_start(u32 flags, bool update_config)
         return false;
 
     trace_logger_enabled = true;
+    trace_logger_stop_reason = NULL;
     trace_logger_follow_latest = true;
     trace_logger_scroll_to_bottom = true;
     trace_logger_wait_for_scroll_away = false;
     trace_logger_sync_flags();
-    gui_set_status_message("Trace recording started", 3000);
+    gui_notify(gui_NotificationInfo, ICON_MD_FIBER_MANUAL_RECORD, "Trace recording started", trace_logger_file_path,
+        "trace");
     return true;
 }
 
@@ -335,7 +340,7 @@ void gui_debug_trace_logger_update(void)
     else if (limit_reached)
     {
         if (trace_logger_stop_disk(false, false))
-            gui_set_status_message("Trace recording stopped: maximum file size reached", 4000);
+            gui_notify(gui_NotificationWarning, NULL, "Trace recording stopped", "Maximum file size reached", "trace");
     }
 }
 
@@ -356,8 +361,9 @@ static bool trace_logger_stop(bool show_status)
 
     trace_logger_enabled = false;
     emu_get_core()->GetTraceLogger()->SetEnabledFlags(0);
+    trace_logger_sync_vblank_watch(false);
     if (show_status)
-        gui_set_status_message("Trace recording stopped", 3000);
+        gui_notify(gui_NotificationInfo, ICON_MD_STOP, "Trace recording stopped", NULL, "trace");
     return true;
 }
 
@@ -374,13 +380,14 @@ static bool trace_logger_stop_disk(bool show_status, bool flush_entries)
 
     trace_logger_enabled = false;
     emu_get_core()->GetTraceLogger()->SetEnabledFlags(0);
+    trace_logger_sync_vblank_watch(false);
     if (!success)
     {
         Error("Error closing trace log file: %s", trace_logger_file_path);
-        gui_set_error_message("Trace recording stopped with a disk write error.");
+        gui_notify(gui_NotificationError, NULL, "Trace recording stopped", "Disk write error", "trace");
     }
     else if (show_status)
-        gui_set_status_message("Trace recording stopped", 3000);
+        gui_notify(gui_NotificationInfo, ICON_MD_STOP, "Trace recording stopped", trace_logger_file_path, "trace");
     return success;
 }
 
@@ -389,8 +396,11 @@ void gui_debug_trace_logger_shutdown(void)
     trace_logger_stop(false);
 }
 
-void gui_debug_trace_logger_reset(void)
+void gui_debug_trace_logger_reset(const char* reason)
 {
+    if (trace_logger_enabled)
+        trace_logger_stop_reason = reason;
+
     trace_logger_stop(false);
     emu_get_core()->GetTraceLogger()->Reset();
 }
@@ -398,6 +408,11 @@ void gui_debug_trace_logger_reset(void)
 bool gui_debug_trace_logger_is_enabled(void)
 {
     return trace_logger_enabled;
+}
+
+const char* gui_debug_trace_logger_get_stop_reason(void)
+{
+    return trace_logger_stop_reason;
 }
 
 const char* gui_debug_trace_logger_get_output_path(void)
@@ -660,7 +675,7 @@ void gui_debug_trace_logger_clear(void)
     emu_get_core()->GetTraceLogger()->Reset();
 }
 
-void gui_debug_save_log(const char* file_path)
+bool gui_debug_save_log(const char* file_path)
 {
     FILE* file = fopen_utf8(file_path, "w");
 
@@ -682,7 +697,10 @@ void gui_debug_save_log(const char* file_path)
         }
 
         fclose(file);
+        return true;
     }
+
+    return false;
 }
 
 static void trace_logger_menu(void)
@@ -765,6 +783,38 @@ static void trace_logger_menu(void)
             trace_logger_menu_event_filter("Interrupts", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_INTERRUPTS);
             trace_logger_menu_event_filter("Status", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_STATUS);
             trace_logger_menu_event_filter("Sprites", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_SPRITES);
+            if (ImGui::BeginMenu("Sprite Budget"))
+            {
+                trace_logger_menu_event_filter("Every Line", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_SPRITE_BUDGET);
+                trace_logger_menu_event_filter("Limit Hits", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_SPRITE_LIMIT);
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Missed VBlank"))
+            {
+                trace_logger_menu_event_filter("Enabled", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_MISSED_VBLANK);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Logs a missed VBlank if the watched access did not happen during the frame ending at VBlank");
+
+                float input_x = ImGui::GetCursorPosX() + ImGui::CalcTextSize("Operation").x + ImGui::GetStyle().ItemSpacing.x;
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Address");
+                ImGui::SameLine(input_x);
+                u16 address = (u16)config_debug.trace_vblank_watch_address;
+                ImGui::PushItemWidth(45.0f);
+                if (ImGui::InputScalar("##vblank_watch_address", ImGuiDataType_U16, &address, NULL, NULL, "%04X", ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase))
+                    config_debug.trace_vblank_watch_address = address;
+                ImGui::PopItemWidth();
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("Operation");
+                ImGui::SameLine(input_x);
+                ImGui::PushItemWidth(60.0f);
+                ImGui::Combo("##vblank_watch_operation", &config_debug.trace_vblank_watch_operation, "R\0W\0R/W\0\0");
+                ImGui::PopItemWidth();
+
+                ImGui::EndMenu();
+            }
             trace_logger_menu_event_filter("State", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_STATE);
             trace_logger_menu_event_filter("Data", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_DATA);
             trace_logger_menu_event_filter("CRAM", &config_debug.trace_vdp_events, TRACE_VDP_EVENT_CRAM);
@@ -857,6 +907,17 @@ static void trace_logger_sync_flags(void)
     logger->SetEventFilter(TRACE_PSG, (u32)config_debug.trace_psg_events);
     logger->SetEventFilter(TRACE_YM2413, (u32)config_debug.trace_ym2413_events);
     logger->SetEventFilter(TRACE_MAPPER, (u32)config_debug.trace_mapper_events);
+    trace_logger_sync_vblank_watch(true);
+}
+
+static void trace_logger_sync_vblank_watch(bool enabled)
+{
+    bool active = enabled && config_debug.trace_vdp &&
+        (((u32)config_debug.trace_vdp_events & TRACE_VDP_EVENT_MISSED_VBLANK) != 0);
+    int operation = config_debug.trace_vblank_watch_operation;
+    bool read = active && ((operation == 0) || (operation == 2));
+    bool write = active && ((operation == 1) || (operation == 2));
+    emu_get_core()->GetProcessor()->SetVBlankWatch(read, write, (u16)config_debug.trace_vblank_watch_address);
 }
 
 static u32 trace_logger_get_config_flags(void)

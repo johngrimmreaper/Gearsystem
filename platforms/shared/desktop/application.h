@@ -28,6 +28,8 @@ struct ApplicationParams
 {
     const char* rom_file = NULL;
     const char* symbol_file = NULL;
+    const char* state_file = NULL;
+    int state_slot = 0;
     bool force_fullscreen = false;
     bool force_windowed = false;
     int mcp_mode = -1;
@@ -35,10 +37,10 @@ struct ApplicationParams
     bool mcp_tcp_port_set = false;
     std::string mcp_http_address = "127.0.0.1";
     bool mcp_http_address_set = false;
-    int geartogear_session = 1;
-    bool geartogear_session_set = false;
-    int geartogear_stall_us = 0;
-    bool geartogear_stall_us_set = false;
+    int link_cable_session = 1;
+    bool link_cable_session_set = false;
+    int link_cable_stall_us = 0;
+    bool link_cable_stall_us_set = false;
 };
 
 #ifdef APPLICATION_IMPORT
@@ -54,6 +56,7 @@ EXTERN int application_sdl_version_patch;
 EXTERN bool application_show_menu;
 
 EXTERN int application_init(const ApplicationParams& params);
+EXTERN void application_apply_settings(void);
 EXTERN void application_destroy(void);
 EXTERN void application_mainloop(void);
 EXTERN void application_trigger_quit(void);
@@ -61,7 +64,6 @@ EXTERN void application_trigger_fullscreen(bool fullscreen);
 EXTERN void application_trigger_fit_to_content(int width, int height);
 EXTERN void application_refocus_window(void);
 EXTERN void application_update_title_with_rom(const char* rom);
-EXTERN void application_input_pump(void);
 EXTERN bool application_check_single_instance(const char* rom_file, const char* symbol_file);
 #if defined(__APPLE__)
 EXTERN bool application_can_launch_new_instance(void);

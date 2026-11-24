@@ -289,19 +289,6 @@ inline void append_path_component(std::string& path, const char* component)
     path += component;
 }
 
-inline bool create_directory_if_not_exists(const char* path)
-{
-#if defined(_WIN32)
-    int res = _mkdir(path);
-#else
-    int res = mkdir(path, 0755);
-#endif
-    if (res == 0 || errno == EEXIST)
-        return true;
-    else
-        return false;
-}
-
 #if defined(_WIN32)
 inline std::wstring utf8_to_wstring(const char* utf8_str)
 {
@@ -335,6 +322,19 @@ inline FILE* fopen_utf8(const char* path, const char* mode)
     std::wstring wmode = utf8_to_wstring(mode);
     return _wfopen(wpath.c_str(), wmode.c_str());
 }
+
+inline bool rename_file_utf8(const char* from, const char* to)
+{
+    std::wstring wfrom = utf8_to_wstring(from);
+    std::wstring wto = utf8_to_wstring(to);
+    return MoveFileExW(wfrom.c_str(), wto.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+}
+
+inline bool remove_file_utf8(const char* path)
+{
+    std::wstring wpath = utf8_to_wstring(path);
+    return DeleteFileW(wpath.c_str()) != 0;
+}
 #else
 #define open_ifstream_utf8(stream, path, mode) \
     stream.open(path, mode)
@@ -346,7 +346,51 @@ inline FILE* fopen_utf8(const char* path, const char* mode)
 {
     return fopen(path, mode);
 }
+
+inline bool rename_file_utf8(const char* from, const char* to)
+{
+    return rename(from, to) == 0;
+}
+
+inline bool remove_file_utf8(const char* path)
+{
+    return remove(path) == 0;
+}
 #endif
+
+inline bool create_directory_if_not_exists(const char* path)
+{
+#if defined(_WIN32)
+    int res = _wmkdir(utf8_to_wstring(path).c_str());
+#else
+    int res = mkdir(path, 0755);
+#endif
+    if (res == 0 || errno == EEXIST)
+        return true;
+    else
+        return false;
+}
+
+inline bool is_safe_zip_entry_name(const char* name)
+{
+    if (name[0] == '\0' || name[0] == '/' || name[0] == '\\' || name[1] == ':')
+        return false;
+
+    const char* component = name;
+
+    while (true)
+    {
+        size_t length = strcspn(component, "/\\");
+
+        if (length == 2 && component[0] == '.' && component[1] == '.')
+            return false;
+
+        if (component[length] == '\0')
+            return true;
+
+        component += length + 1;
+    }
+}
 
 inline bool extract_zip_to_folder(const char* zip_path, const char* out_folder)
 {
@@ -382,22 +426,47 @@ inline bool extract_zip_to_folder(const char* zip_path, const char* out_folder)
         if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat))
         {
             Error("mz_zip_reader_file_stat failed for file %d", i);
-            continue;
+            mz_zip_reader_end(&zip_archive);
+            return false;
+        }
+
+        if (!is_safe_zip_entry_name(file_stat.m_filename))
+        {
+            Error("Unsafe path in ZIP archive: %s", file_stat.m_filename);
+            mz_zip_reader_end(&zip_archive);
+            return false;
+        }
+
+        string name(file_stat.m_filename);
+        size_t separator = name.find('/');
+
+        while (separator != string::npos)
+        {
+            string directory = out_dir + "/" + name.substr(0, separator);
+
+            if (!create_directory_if_not_exists(directory.c_str()))
+            {
+                Error("Failed to create directory %s", directory.c_str());
+                mz_zip_reader_end(&zip_archive);
+                return false;
+            }
+
+            separator = name.find('/', separator + 1);
         }
 
         if (file_stat.m_is_directory)
             continue;
 
-        string out_path = out_dir + "/" + file_stat.m_filename;
+        string out_path = out_dir + "/" + name;
 
         if (!mz_zip_reader_extract_to_file(&zip_archive, i, out_path.c_str(), 0))
         {
             Error("Failed to extract %s", out_path.c_str());
+            mz_zip_reader_end(&zip_archive);
+            return false;
         }
-        else
-        {
-            Debug("Extracted: %s", out_path.c_str());
-        }
+
+        Debug("Extracted: %s", out_path.c_str());
     }
 
     mz_zip_reader_end(&zip_archive);

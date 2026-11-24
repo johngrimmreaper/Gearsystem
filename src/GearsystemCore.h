@@ -24,6 +24,7 @@
 #include "Cartridge.h"
 #include "Video.h"
 #include "geartogear.h"
+#include "MarkIIILink.h"
 
 class Memory;
 class Processor;
@@ -57,6 +58,7 @@ class SmsIOPorts;
 class GameGearIOPorts;
 class BootromMemoryRule;
 class TraceLogger;
+class Profiler;
 
 class GearsystemCore
 {
@@ -81,11 +83,13 @@ public:
     ~GearsystemCore();
     void Init(GS_Color_Format pixelFormat = GS_PIXEL_RGBA8888);
     bool RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSampleCount, GS_Debug_Run* debug = NULL, bool render = true);
+    INLINE bool RunCycle(u8* frame_buffer, unsigned int& clock_cycles, bool step_debugger = false);
+    void EndFrame(s16* sample_buffer, int* sample_count);
+    void SaveLinkCableState(std::ostream& stream);
+    void LoadLinkCableState(std::istream& stream);
     void RenderFrameBuffer(u8* finalFrameBuffer);
     bool LoadROM(const char* szFilePath, Cartridge::ForceConfiguration* config = NULL, bool softpatching = false);
     bool LoadROMFromBuffer(const u8* buffer, int size, Cartridge::ForceConfiguration* config = NULL, const char* szFilePath = NULL);
-    void SaveMemoryDump();
-    void SaveDisassembledROM();
     bool GetRuntimeInfo(GS_RuntimeInfo& runtime_info);
     void KeyPressed(GS_Joypads joypad, GS_Keys key);
     void KeyReleased(GS_Joypads joypad, GS_Keys key);
@@ -102,7 +106,6 @@ public:
     bool IsPaused();
     void ResetROM(Cartridge::ForceConfiguration* config = NULL);
     void ResetROMPreservingRAM(Cartridge::ForceConfiguration* config = NULL);
-    void ResetSound();
     void SaveRam();
     void SaveRam(const char* szPath, bool fullPath = false);
     void LoadRam();
@@ -115,7 +118,6 @@ public:
     bool GetSaveStateScreenshot(int index, const char* path, GS_SaveState_Screenshot* screenshot);
     void SetCheat(const char* szCheat);
     void ClearCheats();
-    void SetRamModificationCallback(RamChangedCallback callback);
     Memory* GetMemory();
     Cartridge* GetCartridge();
     Processor* GetProcessor();
@@ -125,19 +127,23 @@ public:
     void SetGlassesConfig(GlassesConfig config);
     u64 GetMasterClockCycles();
     void SetMasterClockCycles(u64 cycles);
-    void SetGearToGearCallbacks(
-        GS_GearToGear_Publish_Callback publish_callback,
-        GS_GearToGear_Sample_Callback sample_callback,
-        GS_GearToGear_Poll_Callback poll_callback,
-        GS_GearToGear_Fence_Callback fence_callback,
-        GS_GearToGear_Sync_Callback sync_callback,
-        void* user_data);
-    void SetGearToGearTransportActive(bool active, u64 cycle);
-    void SetGearToGearCableConnected(bool connected, u64 cycle);
+    void SetLinkCableCallbacks(GS_LinkCable_Publish_Callback publish_callback,
+        GS_LinkCable_Sample_Callback sample_callback, GS_LinkCable_Poll_Callback poll_callback,
+        GS_LinkCable_Fence_Callback fence_callback, GS_LinkCable_Sync_Callback sync_callback, void* user_data);
+    void SetLinkCableProtocol(GS_LinkCable_Protocol protocol, u64 cycle);
+    void SetLinkCableTransportActive(bool active, u64 cycle);
+    void SetLinkCableConnected(bool connected, u64 cycle);
+    INLINE GS_LinkCable_Protocol GetLinkCableProtocol() const;
+    GS_LinkCable_Protocol GetSupportedLinkCableProtocol() const;
+    GS_LinkCable_Protocol GetDetectedLinkCableProtocol() const;
+    INLINE u64 GetLinkCableCycles() const;
+    void MarkIIIKeyPressed(GS_MarkIII_Key key);
+    void MarkIIIKeyReleased(GS_MarkIII_Key key);
     bool IsNativeGameGearMode() const;
-    u64 GetGearToGearCycles() const;
     GameGearIOPorts* GetGameGearIOPorts();
+    MarkIIILink* GetMarkIIILink();
     TraceLogger* GetTraceLogger();
+    Profiler* GetProfiler();
 
 private:
     void InitMemoryRules();
@@ -182,13 +188,54 @@ private:
     BootromMemoryRule* m_pBootromMemoryRule;
     IratahackMemoryRule* m_pIratahackMemoryRule;
     bool m_bPaused;
-    RamChangedCallback m_pRamChangedCallback;
     GS_Color_Format m_pixelFormat;
     GlassesConfig m_GlassesConfig;
     u64 m_master_clock_cycles;
-    u64 m_geartogear_cycles;
+    u64 m_link_cable_cycles;
+    GS_LinkCable_Protocol m_link_cable_protocol;
     TraceLogger* m_trace_logger;
+    Profiler* m_profiler;
     u8* m_pFrameBuffer;
 };
+
+#include "Audio.h"
+#include "GameGearIOPorts.h"
+#include "SmsIOPorts.h"
+
+INLINE bool GearsystemCore::RunCycle(u8* frame_buffer, unsigned int& clock_cycles, bool step_debugger)
+{
+    m_pFrameBuffer = frame_buffer;
+    bool game_gear = IsNativeGameGearMode();
+    bool markiii_link = m_link_cable_protocol == LinkCableProtocolMarkIII;
+    MarkIIILink* markiii = m_pSmsIOPorts->GetMarkIIILink();
+
+    if (game_gear)
+        m_pGameGearIOPorts->BeginLinkInstruction(m_link_cable_cycles);
+    else if (markiii_link)
+        markiii->BeginLinkInstruction(m_link_cable_cycles);
+
+    clock_cycles = step_debugger ? m_pProcessor->RunInstruction() : m_pProcessor->RunFor(1);
+    m_master_clock_cycles += clock_cycles;
+    m_link_cable_cycles += clock_cycles;
+
+    if (game_gear)
+        m_pGameGearIOPorts->EndLinkInstruction(m_link_cable_cycles);
+    else if (markiii_link)
+        markiii->EndLinkInstruction(m_link_cable_cycles);
+
+    bool vblank = m_pVideo->Tick(clock_cycles);
+    m_pAudio->Tick(clock_cycles);
+    return vblank;
+}
+
+INLINE GS_LinkCable_Protocol GearsystemCore::GetLinkCableProtocol() const
+{
+    return m_link_cable_protocol;
+}
+
+INLINE u64 GearsystemCore::GetLinkCableCycles() const
+{
+    return m_link_cable_cycles;
+}
 
 #endif	/* CORE_H */

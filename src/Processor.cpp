@@ -35,6 +35,7 @@ Processor::Processor(Memory* pMemory)
     m_pMemory->SetProcessor(this);
     InitPointer(m_pIOPorts);
     InitPointer(m_pTraceLogger);
+    InitPointer(m_pProfiler);
     InitOPCodeTable();
     m_bIFF1 = false;
     m_bIFF2 = false;
@@ -56,6 +57,11 @@ Processor::Processor(Memory* pMemory)
     m_ProActionReplayList.clear();
     m_breakpoints_enabled = false;
     m_breakpoints_irq_enabled = false;
+    m_vblank_watch_read = false;
+    m_vblank_watch_write = false;
+    m_vblank_watch_address = 0;
+    ResetVBlankWatch();
+    RefreshMemoryHooks();
     m_cpu_breakpoint_hit = false;
     m_memory_breakpoint_hit = false;
     m_run_to_breakpoint_hit = false;
@@ -96,11 +102,6 @@ void Processor::SetDisassemblerSyntax(GS_Disassembler_Syntax syntax)
         syntax = GS_Disassembler_Syntax_Gearsystem;
 
     m_disassembler_syntax = syntax;
-}
-
-GS_Disassembler_Syntax Processor::GetDisassemblerSyntax() const
-{
-    return m_disassembler_syntax;
 }
 
 void Processor::Init()
@@ -149,6 +150,7 @@ void Processor::Reset(bool cycleAccurateHalt)
     m_run_to_breakpoint_requested = false;
     ClearDisassemblerCallStack();
     m_debug_next_irq = 1;
+    ResetVBlankWatch();
 }
 
 void Processor::SetIOPOrts(IOPorts* pIOPorts)
@@ -191,7 +193,7 @@ u32 Processor::RunFor(u32 tstates)
                 WZ.SetValue(PC.GetValue());
 #if !defined(GS_DISABLE_DISASSEMBLER)
                 m_debug_next_irq = 2;
-                PushCallStack(pc, 0x0066, pc, 0);
+                PushCallStack(pc, 0x0066, pc, 0, 0, true);
                 TraceIRQEvent(pc, 0x0066, 2);
 #endif
                 DisassembleNextOPCode();
@@ -226,7 +228,7 @@ u32 Processor::RunFor(u32 tstates)
                 UpdateProActionReplay();
 #if !defined(GS_DISABLE_DISASSEMBLER)
                 m_debug_next_irq = 3;
-                PushCallStack(pc, interrupt_vector, pc, m_pMemory->GetBank(interrupt_vector));
+                PushCallStack(pc, interrupt_vector, pc, m_pMemory->GetBank(interrupt_vector), 0, true);
                 TraceIRQEvent(pc, interrupt_vector, 3);
 #endif
                 DisassembleNextOPCode();
@@ -303,9 +305,6 @@ void Processor::LogInstructionEvent(u16 pc)
     e.cpu.i = I;
     e.cpu.r = R;
     e.cpu.im = (u8)m_iInterruptMode;
-    e.cpu.iff1 = m_bIFF1;
-    e.cpu.iff2 = m_bIFF2;
-    e.cpu.halt = m_bHalt;
     e.cpu.size = IsValidPointer(record) ? (u8)std::min(record->size, (int)sizeof(e.cpu.opcodes)) : 1;
 
     for (u8 i = 0; i < sizeof(e.cpu.opcodes); i++)
@@ -367,6 +366,23 @@ void Processor::RequestNMI()
 void Processor::SetTraceLogger(TraceLogger* pTraceLogger)
 {
     m_pTraceLogger = pTraceLogger;
+}
+
+void Processor::SetProfiler(Profiler* pProfiler)
+{
+    m_pProfiler = pProfiler;
+}
+
+void Processor::ProfilerEnter(u16 address, u32 pending_cycles, bool irq)
+{
+#if !defined(GS_DISABLE_DISASSEMBLER)
+    u32 key = (address < 0xC000) ? m_pMemory->GetPhysicalAddress(address) : (PROFILER_RAM_KEY | address);
+    m_pProfiler->Enter(key, address, m_pMemory->GetBank(address), SP.GetValue(), irq, pending_cycles);
+#else
+    UNUSED(address);
+    UNUSED(pending_cycles);
+    UNUSED(irq);
+#endif
 }
 
 void Processor::ExecuteOPCode()
@@ -1043,11 +1059,51 @@ void Processor::EnableBreakpoints(bool enable, bool irqs)
 {
     m_breakpoints_enabled = enable;
     m_breakpoints_irq_enabled = irqs;
+    RefreshMemoryHooks();
 }
 
 void Processor::ResetBreakpoints()
 {
     m_breakpoints.clear();
+}
+
+void Processor::SetVBlankWatch(bool read, bool write, u16 address)
+{
+    if ((m_vblank_watch_read == read) && (m_vblank_watch_write == write) &&
+        (m_vblank_watch_address == address))
+        return;
+
+    m_vblank_watch_read = read;
+    m_vblank_watch_write = write;
+    m_vblank_watch_address = address;
+    ResetVBlankWatch();
+    RefreshMemoryHooks();
+}
+
+u32 Processor::UpdateVBlankWatch()
+{
+    if (!m_vblank_watch_read && !m_vblank_watch_write)
+        return 0;
+
+    bool missed = m_vblank_watch_armed && !m_vblank_watch_hit;
+    m_vblank_watch_armed = true;
+    m_vblank_watch_hit = false;
+    m_vblank_watch_misses = missed ? m_vblank_watch_misses + 1 : 0;
+
+    return m_vblank_watch_misses;
+}
+
+void Processor::RefreshMemoryHooks()
+{
+    m_memory_hooks_read = m_vblank_watch_read || m_breakpoints_enabled;
+    m_memory_hooks_write = m_vblank_watch_write || m_breakpoints_enabled;
+}
+
+void Processor::ResetVBlankWatch()
+{
+    m_vblank_watch_hit = false;
+    m_vblank_watch_armed = false;
+    m_vblank_watch_misses = 0;
 }
 
 bool Processor::AddBreakpoint(int type, char* text, bool read, bool write, bool execute)
@@ -1187,6 +1243,19 @@ bool Processor::IsBreakpoint(int type, u16 address)
     return false;
 }
 
+void Processor::ResetDebuggerExecutionState()
+{
+    ClearDisassemblerCallStack();
+    m_run_to_breakpoint_requested = false;
+    m_cpu_breakpoint_hit = false;
+    m_memory_breakpoint_hit = false;
+    m_run_to_breakpoint_hit = false;
+    m_debug_next_irq = 0;
+
+    if (IsValidPointer(m_pProfiler))
+        m_pProfiler->ResetStack();
+}
+
 void Processor::ClearDisassemblerCallStack()
 {
     while(!m_disassembler_call_stack.empty())
@@ -1290,6 +1359,7 @@ void Processor::SaveState(std::ostream& stream)
     stream.write(reinterpret_cast<const char*> (&m_bInputLastCycle), sizeof(m_bInputLastCycle));
     stream.write(reinterpret_cast<const char*> (&m_Q), sizeof(m_Q));
     stream.write(reinterpret_cast<const char*> (&m_QTemp), sizeof(m_QTemp));
+    stream.write(reinterpret_cast<const char*> (&m_iHaltCycle), sizeof(m_iHaltCycle));
 }
 
 void Processor::LoadState(std::istream& stream, int version)
@@ -1355,6 +1425,12 @@ void Processor::LoadState(std::istream& stream, int version)
         m_Q = 0;
         m_QTemp = 0;
     }
+
+    m_iHaltCycle = 0;
+    if (version >= 111)
+        stream.read(reinterpret_cast<char*> (&m_iHaltCycle), sizeof(m_iHaltCycle));
+
+    ResetVBlankWatch();
 }
 
 void Processor::SetProActionReplayCheat(const char* szCheat)

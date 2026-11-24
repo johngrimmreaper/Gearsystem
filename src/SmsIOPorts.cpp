@@ -91,6 +91,7 @@ void SmsIOPorts::LogIOEvent(u8 event, u8 port, u8 raw, u8 effective, u8 previous
 void SmsIOPorts::Reset()
 {
     m_Port3F = 0xFF;
+    m_markiii_link.Reset();
 }
 
 void SmsIOPorts::SaveState(std::ostream& stream)
@@ -98,12 +99,12 @@ void SmsIOPorts::SaveState(std::ostream& stream)
     using namespace std;
 
     stream.write(reinterpret_cast<const char*> (&m_Port3F), sizeof(m_Port3F));
+    m_markiii_link.SaveState(stream);
 }
 
 void SmsIOPorts::LoadState(std::istream& stream, int version)
 {
     using namespace std;
-    UNUSED(version);
-
     stream.read(reinterpret_cast<char*> (&m_Port3F), sizeof(m_Port3F));
+    m_markiii_link.LoadState(stream, version);
 }

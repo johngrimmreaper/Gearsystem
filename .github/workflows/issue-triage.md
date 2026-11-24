@@ -6,6 +6,8 @@ on:
     types: [opened]
     lock-for-agent: true
   roles: all
+  skip-roles: [admin, maintainer, write]
+  skip-bots: [github-actions, dependabot]
 permissions:
   contents: read
   issues: read
@@ -31,7 +33,6 @@ safe-outputs:
     issue-intent: false
     max: 3
     allowed:
-      - agentic workflows
       - bug
       - duplicate
       - feature request
@@ -57,55 +58,66 @@ safe-outputs:
 
 ## Task
 
-Triage the newly opened issue in `${{ github.repository }}` and apply the correct label or labels from the configured allowlist.
+Triage the newly opened issue #${{ github.event.issue.number }} in `${{ github.repository }}` and apply the correct label or labels from the configured allowlist.
 
-Use GitHub read tools to inspect the triggering issue. Search existing open and closed issues for likely duplicates before deciding. Be conservative: it is better to under-label than to apply a speculative label.
+Use GitHub read tools to inspect the issue. Be conservative: it is better to under-label than to apply a speculative label.
+
+`README.md` in the checked-out repository is the source of truth for what Gearsystem supports. Use its Features and Tips sections when deciding between `bug`, `feature request`, `question`, and `not a bug`.
 
 ## Triage Protocol
 
 ### Phase 1: Gather Context
 
-1. Read the triggering issue title, body, author association, and current labels.
-2. Search existing open and closed issues for similar titles, affected games, mapper names, hardware names, error messages, or workflow names.
-3. Consider the available label allowlist only: `agentic workflows`, `bug`, `duplicate`, `feature request`, `needs info`, `not a bug`, `question`, `wontfix`.
-4. Do not create, rename, remove, or edit labels.
+1. Read the issue title, body, author association, and current labels.
+2. Read the Features and Tips sections of `README.md`.
+3. Search existing open and closed issues for similar titles, affected games, mapper names, hardware names, or error messages.
+4. Use only the configured allowlist: `bug`, `duplicate`, `feature request`, `needs info`, `not a bug`, `question`, `wontfix`. Do not create, rename, remove, or edit labels.
 
-### Phase 2: Quality And Completeness Check
+### Phase 2: Primary Classification
 
-1. If the issue already has the correct label set and no duplicate close or clarification is needed, call `noop`.
-2. If there is not enough information to choose a primary label, add `needs info`. Do not add `question` unless the issue is actually a user question.
-3. Post a clarification comment only when one or more missing details would materially affect the next investigation step. Add `needs info` when clarification is required; it may be used alongside a primary label.
-4. Before writing a clarification, make an internal inventory of relevant facts under `Provided` and `Missing`. Do not include this inventory in the comment.
-5. Treat a fact as provided whenever the report contains the same information in equivalent wording. An operating system or distribution counts as the platform; an app or core name counts as the frontend; a title, region, and media description count as game/media identity; and described BIOS, controller, or emulator choices count as configuration settings. Never ask the reporter to repeat, reconfirm, or reformat a provided fact.
-6. Each bullet must ask for exactly one missing fact. Never combine a missing fact with facts already present in the same bullet. If the report gives an imprecise value such as `latest`, ask for an exact value only when it materially changes the investigation, and acknowledge the supplied value in the question.
-7. Common useful details are the Gearsystem version, whether the user is running the desktop app or RetroArch/libretro, the host platform, and relevant non-default configuration settings. Ask only for absent items that matter to this report; this list is not a default checklist.
-8. Ask for additional details only when they are absent and pertinent: concise reproduction steps and expected versus actual behavior; the exact game/title/revision, media type or hash, clean-dump status, BIOS, system card, or machine model; a screenshot, video, or audio recording; controller or other hardware details; or an exact error and a short relevant log excerpt.
-9. Keep the request to the smallest useful set, normally one to four bullets. Do not request an exhaustive form, complete configuration or log dumps, ROM/media uploads, secrets, or sensitive paths. If the report is already actionable, do not post a clarification comment.
+Choose exactly one primary label whenever the issue type is clear, even when some details are missing:
 
-### Phase 3: Primary Classification
-
-Apply labels only through the configured `add-labels` safe output. Choose exactly one primary label when there is enough information:
-
-- `bug`: broken behavior in an already-supported Gearsystem feature, mapper, platform, build, package, or workflow. Use this for regressions, crashes, incorrect emulation, save-state problems, audio/video/input defects, frontend bugs, and release or CI breakages caused by this repository.
-- `feature request`: a request for new behavior, new platform support, new debugging/MCP capability, new frontend option, or support for currently unsupported cartridge hardware. If a user reports that a game does not run and the likely reason is a missing mapper, unsupported mapper variant, unsupported cartridge accessory, or unsupported special hardware, label it `feature request`, not `bug`.
-- `question`: a user question, support request, usage question, or troubleshooting question where the user is asking how something works or how to use Gearsystem.
-- `not a bug`: expected behavior, invalid or corrupted ROM/save data, a known hardware limitation, an external service problem, spam/test content, or behavior caused by user environment rather than Gearsystem.
+- `bug`: broken behavior in an already-supported Gearsystem feature, hardware, platform, build, package, or workflow. Use this for regressions, crashes, incorrect emulation, save-state problems, audio/video/input defects, frontend bugs, and release or CI breakages caused by this repository.
+- `feature request`: a request for new behavior, new platform support, new debugging/MCP capability, new frontend option, or hardware, peripherals, or formats that `README.md` does not list as supported. A game that does not run because it needs unsupported hardware is a `feature request`, not a `bug`.
+- `question`: a user question, support request, usage question, or setup problem where the user is asking how something works or how to use Gearsystem.
+- `not a bug`: expected behavior, invalid or corrupted ROM/save data, a known hardware limitation, an incorrect setting, an antivirus false positive, an external service problem, spam, unsolicited promotion, or behavior caused by the user environment rather than Gearsystem.
 - `wontfix`: a valid request or limitation that is intentionally outside project scope. Use this sparingly and only when the issue text or maintainer context makes that intent clear.
-- `agentic workflows`: an issue about gh-aw, Build Doctor, Issue Triage, workflow agents, safe outputs, generated lock files, or other agentic workflow behavior in this repository. Do not add this label to ordinary emulator bugs, game compatibility reports, or feature requests.
 
-### Phase 4: Gearsystem-Specific Checks
+If the issue already has the correct labels and needs no comment or duplicate close, call `noop`.
 
-For game compatibility reports, separate bugs from unsupported cartridge hardware:
+### Phase 3: Gearsystem-Specific Checks
 
-1. Treat likely unsupported or missing mappers as `feature request`. Clues include mapper support requests, bootleg or multicart hardware, Codemasters/Korean/SG-1000 banking variants, special cartridge hardware, or a game that fails only because Gearsystem has no implementation for that cartridge type.
-2. Treat an already-supported mapper or known supported game that regressed, crashes, corrupts graphics/audio/input, fails save/RTC behavior, or diverges from hardware/reference emulator behavior as `bug`.
-3. Treat bad dumps, patched/trainer ROM issues without clean-ROM evidence, invalid save files, or expected Sega Master System / Game Gear / SG-1000 hardware behavior as `not a bug` when the evidence is clear.
-4. Use `needs info` when the report says only that a game does not run but omits the exact ROM title/region/revision, ROM hash, Gearsystem version, platform, steps, or whether a clean dump was tested.
+1. Games that need a mapper or cartridge hardware not listed in `README.md` are `feature request`. Codemasters, Korean, MSX + Nemesis, Janggun, SG-1000, and Korean multicart mappers are supported, so failures on them are not evidence of missing hardware.
+2. Requests to emulate other machines or arcade boards, such as Sega System E, are `feature request`.
+3. A game that uses a supported mapper or peripheral and regressed, crashes, corrupts graphics/audio/input, fails save behavior, or diverges from hardware/reference emulator behavior is `bug`.
+4. Bad dumps, patched/trainer ROM issues without clean-ROM evidence, invalid save files, or expected Sega Master System / Game Gear / SG-1000 hardware behavior are `not a bug` when the evidence is clear.
+5. The System, Region, mapper, and FM (YM2413) settings matter only for region, speed, detection, or sound problems. Ask about them only in those cases.
+
+### Phase 4: Missing Information
+
+Ask only for facts the maintainer would otherwise request in the first reply. Add `needs info` and post a clarification comment only when one of them is missing.
+
+1. Ask only on `bug` reports or when the issue type cannot be determined. Never ask on `feature request`, `question`, `not a bug`, `wontfix`, or duplicate issues.
+2. If the report is empty or unclear, does not name the affected game when one is needed, or does not describe the symptom, ask for that first.
+3. For a bug in emulation or in a specific game, such as a crash, hang, black screen, failure to boot or load, or wrong graphics, audio, or input, ask for whichever of these facts the report does not provide, in this order:
+   - The Gearsystem version and whether it is the desktop app or the RetroArch/libretro core, as one bullet. Ask only for the part that is missing.
+   - The log, only for crashes, hangs, black screens, and failures to start, boot, or load: the output printed when the desktop app is started from a terminal, or the RetroArch log for the core. Mention only the one that matches the frontend when the report names it.
+4. When a Phase 3 check names a fact that matters more for this report, ask for it first.
+5. For bugs outside emulation, such as builds, packages, the GUI, the debugger, or MCP, ask only for the version and the host platform, and only when the report suggests they matter, such as a crash on launch that does not name the operating system.
+6. Ask only for the facts listed in this phase or named in Phase 3. Never ask for:
+   - A fact the report already provides in any wording. An operating system counts as the platform, an app or core name counts as the frontend, a RetroArch mention counts as libretro, and imprecise values such as `latest` count as the version.
+   - The host platform for emulation bugs, unless the report suggests the behavior differs between platforms.
+   - The ROM hash, dump status, region, or revision, unless the symptoms point at a bad dump.
+   - Reproduction steps when the report says where the problem happens, expected behavior, how a difference was measured, or settings that Phase 3 does not name.
+   - Screenshots, videos, ROM or media uploads, configuration files, secrets, or sensitive paths.
+   - Anything the maintainer can check alone, such as whether a game is supported or how it behaves on real hardware.
+7. Ask at most two bullets. If nothing from this phase or Phase 3 is missing, post no comment.
+8. Add `needs info` alongside the primary label when asking. Use it without a primary label only when the type cannot be determined.
 
 ### Phase 5: Duplicate Detection
 
 1. Compare the issue to similar open and closed issues.
-2. If there is a high-confidence duplicate, add `duplicate` and close the triggering issue using the configured `close-issue` safe output with duplicate state reason.
+2. If there is a high-confidence duplicate, add `duplicate` and close the issue using the configured `close-issue` safe output with duplicate state reason.
 3. Include the duplicate explanation in the close comment. Do not call `add-comment` separately for duplicates.
 4. Use a clearly automated, polite Markdown close comment with line breaks. Use this shape:
 
@@ -122,18 +134,18 @@ This is an automated triage result generated by [Issue Triage](https://github.co
 
 1. Apply the chosen labels with `add-labels`.
 2. When calling `add-labels`, provide a JSON array of separate exact label strings from the allowlist. For example, use `"labels": ["bug"]`; never use `"labels": ["[bug]"]`, `"labels": "[bug]"`, or a comma-joined label string.
-3. Default to labels only. Do not post a comment unless Phase 5 closes a duplicate or Phase 2 identifies specific missing details that materially affect investigation.
+3. Default to labels only. Do not post a comment unless Phase 5 closes a duplicate or Phase 4 requires a clarification.
 4. For clarification comments, use this exact Markdown structure. Replace the placeholders with only absent, report-specific details, and end with the linked sentence exactly as written:
 
 ```markdown
 Please provide:
 
 - <one specific fact that is absent from the report>
-- <another absent fact only when it materially helps the investigation>
+- <a second absent fact only when it is also required>
 
 This is an automated triage request generated by [Issue Triage](https://github.com/${{ github.repository }}/actions/workflows/issue-triage.lock.yml)
 ```
 
 ## Style
 
-Keep comments brief, neutral, polite, and explicitly automated. Clarification comments must use the Markdown list structure in Phase 6; duplicate comments must use the short structure in Phase 5. Use direct, specific wording and do not add a generic preamble, restate the issue, or ask the reporter to repeat information already supplied. Do not use first person, apologies, thanks, human-like warmth, or sign-offs other than the required linked automation sentence. Do not expose secrets, private resource identifiers, tokens, generated hostnames, or user-sensitive paths. Redact sensitive values as `<redacted>`.
+Keep comments brief, neutral, polite, and explicitly automated. Use direct, specific wording and do not add a generic preamble, restate the issue, or ask the reporter to repeat information already supplied. Do not use first person, apologies, thanks, human-like warmth, or sign-offs other than the required linked automation sentence. Do not expose secrets, private resource identifiers, tokens, generated hostnames, or user-sensitive paths. Redact sensitive values as `<redacted>`.

@@ -31,6 +31,7 @@
     <ClCompile Include="..\..\src\CodemastersMemoryRule.cpp" />
     <ClCompile Include="..\..\src\Eeprom93C46MemoryRule.cpp" />
     <ClCompile Include="..\..\src\GameGearIOPorts.cpp" />
+    <ClCompile Include="..\..\src\MarkIIILink.cpp" />
     <ClCompile Include="..\..\src\GearsystemCore.cpp" />
     <ClCompile Include="..\..\src\Input.cpp" />
     <ClCompile Include="..\..\src\JanggunMemoryRule.cpp" />
@@ -64,6 +65,7 @@
     <ClCompile Include="..\..\src\Video.cpp" />
     <ClCompile Include="..\..\src\YM2413.cpp" />
     <ClCompile Include="..\..\src\TraceLogger.cpp" />
+    <ClCompile Include="..\..\src\Profiler.cpp" />
     <ClCompile Include="..\..\src\VgmRecorder.cpp" />
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
@@ -75,8 +77,10 @@
     <ClCompile Include="..\shared\desktop\emu.cpp" />
     <ClCompile Include="..\shared\desktop\rewind.cpp" />
     <ClCompile Include="..\shared\desktop\runahead.cpp" />
+    <ClCompile Include="..\shared\desktop\video_recorder.cpp" />
     <ClCompile Include="..\shared\desktop\gui.cpp" />
     <ClCompile Include="..\shared\desktop\gui_actions.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_notifications.cpp" />
     <ClCompile Include="..\shared\desktop\gui_cheats.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_disassembler.cpp" />
@@ -84,15 +88,18 @@
     <ClCompile Include="..\shared\desktop\gui_debug_memory.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_processor.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_psg.cpp" />
-    <ClCompile Include="..\shared\desktop\gui_debug_geartogear.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_link_cable.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_markiii_link.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_rewind.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_video.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_ym2413.cpp" />
     <ClCompile Include="..\shared\desktop\gui_debug_trace_logger.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_debug_profiler.cpp" />
     <ClCompile Include="..\shared\desktop\trace_logger_formatter.cpp" />
     <ClCompile Include="..\shared\desktop\gui_filedialogs.cpp" />
     <ClCompile Include="..\shared\desktop\gui_menus.cpp" />
     <ClCompile Include="..\shared\desktop\gui_popups.cpp" />
+    <ClCompile Include="..\shared\desktop\gui_shader.cpp" />
     <ClCompile Include="..\shared\desktop\main.cpp" />
     <ClCompile Include="..\shared\desktop\ogl_renderer.cpp" />
     <ClCompile Include="..\shared\desktop\ogl_shader_program.cpp" />
@@ -105,7 +112,7 @@
     <ClCompile Include="..\shared\desktop\mcp\mcp_tool_registry.cpp" />
     <ClCompile Include="..\shared\desktop\mcp\mcp_server.cpp" />
     <ClCompile Include="..\shared\desktop\single_instance.cpp" />
-    <ClCompile Include="..\shared\desktop\geartogear\geartogear_manager.cpp" />
+    <ClCompile Include="..\shared\desktop\link_cable\link_cable_manager.cpp" />
     <ClCompile Include="..\shared\dependencies\imgui\imgui.cpp">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
     </ClCompile>
@@ -152,6 +159,7 @@
     <ClInclude Include="..\..\src\definitions.h" />
     <ClInclude Include="..\..\src\Eeprom93C46MemoryRule.h" />
     <ClInclude Include="..\..\src\GameGearIOPorts.h" />
+    <ClInclude Include="..\..\src\MarkIIILink.h" />
     <ClInclude Include="..\..\src\game_db.h" />
     <ClInclude Include="..\..\src\gearsystem.h" />
     <ClInclude Include="..\..\src\GearsystemCore.h" />
@@ -198,6 +206,7 @@
     <ClInclude Include="..\..\src\Video.h" />
     <ClInclude Include="..\..\src\YM2413.h" />
     <ClInclude Include="..\..\src\TraceLogger.h" />
+    <ClInclude Include="..\..\src\Profiler.h" />
     <ClInclude Include="..\..\src\VgmRecorder.h" />
     <ClInclude Include="..\shared\dependencies\glad\glad.h" />
     <ClInclude Include="..\shared\dependencies\miniz\miniz.h" />
@@ -221,9 +230,10 @@
     <ClInclude Include="..\shared\desktop\keyboard.h" />
     <ClInclude Include="..\shared\desktop\sound_queue.h" />
     <ClInclude Include="..\shared\desktop\single_instance.h" />
-    <ClInclude Include="..\shared\desktop\geartogear\geartogear_manager.h" />
-    <ClInclude Include="..\shared\desktop\geartogear\geartogear_wire.h" />
+    <ClInclude Include="..\shared\desktop\link_cable\link_cable_manager.h" />
+    <ClInclude Include="..\shared\desktop\link_cable\link_cable_wire.h" />
     <ClInclude Include="..\..\src\geartogear.h" />
+    <ClInclude Include="..\..\src\link_cable.h" />
     <ClInclude Include="..\shared\desktop\application.h" />
     <ClInclude Include="..\shared\desktop\application_headless.h" />
     <ClInclude Include="..\shared\desktop\backers.h" />
@@ -235,25 +245,30 @@
     <ClInclude Include="..\shared\desktop\emu.h" />
     <ClInclude Include="..\shared\desktop\gui.h" />
     <ClInclude Include="..\shared\desktop\gui_actions.h" />
+    <ClInclude Include="..\shared\desktop\gui_notifications.h" />
     <ClInclude Include="..\shared\desktop\gui_cheats.h" />
     <ClInclude Include="..\shared\desktop\gui_debug.h" />
+    <ClInclude Include="..\shared\desktop\gui_colors.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_constants.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_disassembler.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_memeditor.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_memory.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_processor.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_psg.h" />
-    <ClInclude Include="..\shared\desktop\gui_debug_geartogear.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_link_cable.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_markiii_link.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_rewind.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_text.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_video.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_trace_logger.h" />
+    <ClInclude Include="..\shared\desktop\gui_debug_profiler.h" />
     <ClInclude Include="..\shared\desktop\trace_logger_formatter.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_ym2413.h" />
     <ClInclude Include="..\shared\desktop\gui_debug_widgets.h" />
     <ClInclude Include="..\shared\desktop\gui_filedialogs.h" />
     <ClInclude Include="..\shared\desktop\gui_menus.h" />
     <ClInclude Include="..\shared\desktop\gui_popups.h" />
+    <ClInclude Include="..\shared\desktop\gui_shader.h" />
     <ClInclude Include="..\..\src\ips_patch.h" />
     <ClInclude Include="..\shared\desktop\license.h" />
     <ClInclude Include="..\shared\desktop\mcp\mcp_debug_adapter.h" />
@@ -267,6 +282,7 @@
     <ClInclude Include="..\shared\desktop\display.h" />
     <ClInclude Include="..\shared\desktop\rewind.h" />
     <ClInclude Include="..\shared\desktop\runahead.h" />
+    <ClInclude Include="..\shared\desktop\video_recorder.h" />
     <ClInclude Include="..\shared\desktop\events.h" />
     <ClInclude Include="..\shared\desktop\gamepad.h" />
     <ClInclude Include="..\shared\desktop\utils.h" />
@@ -280,6 +296,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Gearsystem.rc" />
+    <ResourceCompile Include="version.rc">
+      <PreprocessorDefinitions>EMULATOR_BUILD="$(EmulatorBuild)";EMULATOR_VERSION=$(EmulatorVersionResource);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -287,6 +306,10 @@
     <ProjectGuid>{B12702AD-ABFB-343A-A199-8E24837244A3}</ProjectGuid>
     <RootNamespace>Gearsystem</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <EmulatorBuild Condition="'$(EmulatorBuild)' == ''">undefined</EmulatorBuild>
+    <EmulatorVersion>$([System.Text.RegularExpressions.Regex]::Match('$(EmulatorBuild)', '^[0-9]+\.[0-9]+\.[0-9]+').Value)</EmulatorVersion>
+    <EmulatorVersion Condition="'$(EmulatorVersion)' == ''">0.0.0</EmulatorVersion>
+    <EmulatorVersionResource>$([System.String]::Copy('$(EmulatorVersion)').Replace('.', ',')),0</EmulatorVersionResource>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
@@ -370,14 +393,15 @@
       <BrowseInformation>false</BrowseInformation>
       <DebugInformationFormat>None</DebugInformationFormat>
       <DisableSpecificWarnings>4577;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;WIN32;WIN64;NDEBUG;EMULATOR_BUILD="$(EmulatorBuild)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;WIN32;WIN64;NDEBUG;_HAS_EXCEPTIONS=0;EMULATOR_BUILD="$(EmulatorBuild)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <ProgramDataBaseFileName>$(IntDir)vc$(PlatformToolsetVersion).pdb</ProgramDataBaseFileName>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
       <WarningLevel>Level3</WarningLevel>
@@ -393,6 +417,8 @@
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <SubSystem>Windows</SubSystem>
       <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <Midl>
@@ -412,14 +438,15 @@
       <BrowseInformation>false</BrowseInformation>
       <DebugInformationFormat>None</DebugInformationFormat>
       <DisableSpecificWarnings>4577;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <ExceptionHandling>Sync</ExceptionHandling>
+      <ExceptionHandling>false</ExceptionHandling>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;WIN32;WIN64;NDEBUG;EMULATOR_BUILD="$(EmulatorBuild)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;WIN32;WIN64;NDEBUG;_HAS_EXCEPTIONS=0;EMULATOR_BUILD="$(EmulatorBuild)";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <ProgramDataBaseFileName>$(IntDir)vc$(PlatformToolsetVersion).pdb</ProgramDataBaseFileName>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
-      <RuntimeTypeInfo>true</RuntimeTypeInfo>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
       <WarningLevel>Level3</WarningLevel>
@@ -435,6 +462,8 @@
       <RandomizedBaseAddress>true</RandomizedBaseAddress>
       <SubSystem>Windows</SubSystem>
       <SuppressStartupBanner>true</SuppressStartupBanner>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <Midl>

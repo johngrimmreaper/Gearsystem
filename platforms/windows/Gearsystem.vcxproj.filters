@@ -22,10 +22,16 @@
     <ClCompile Include="..\shared\desktop\runahead.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\video_recorder.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\gui.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_actions.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_notifications.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_cheats.cpp">
@@ -49,7 +55,10 @@
     <ClCompile Include="..\shared\desktop\gui_debug_psg.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\gui_debug_geartogear.cpp">
+    <ClCompile Include="..\shared\desktop\gui_debug_link_cable.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_debug_markiii_link.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_debug_rewind.cpp">
@@ -64,10 +73,16 @@
     <ClCompile Include="..\shared\desktop\gui_debug_trace_logger.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_debug_profiler.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\desktop\trace_logger_formatter.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_popups.cpp">
+      <Filter>desktop</Filter>
+    </ClCompile>
+    <ClCompile Include="..\shared\desktop\gui_shader.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
     <ClCompile Include="..\shared\desktop\gui_menus.cpp">
@@ -115,8 +130,8 @@
     <ClCompile Include="..\shared\desktop\single_instance.cpp">
       <Filter>desktop</Filter>
     </ClCompile>
-    <ClCompile Include="..\shared\desktop\geartogear\geartogear_manager.cpp">
-      <Filter>desktop\Gear-to-Gear</Filter>
+    <ClCompile Include="..\shared\desktop\link_cable\link_cable_manager.cpp">
+      <Filter>desktop\Link Cable</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\Audio.cpp">
       <Filter>src</Filter>
@@ -146,6 +161,9 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\GameGearIOPorts.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\MarkIIILink.cpp">
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\GearsystemCore.cpp">
@@ -250,6 +268,9 @@
     <ClCompile Include="..\..\src\TraceLogger.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\Profiler.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="..\shared\dependencies\miniz\miniz.c">
       <Filter>dependencies\miniz</Filter>
     </ClCompile>
@@ -318,10 +339,16 @@
     <ClInclude Include="..\shared\desktop\gui_actions.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_notifications.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_cheats.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_colors.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug_constants.h">
@@ -342,7 +369,10 @@
     <ClInclude Include="..\shared\desktop\gui_debug_psg.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\gui_debug_geartogear.h">
+    <ClInclude Include="..\shared\desktop\gui_debug_link_cable.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_debug_markiii_link.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug_rewind.h">
@@ -358,6 +388,9 @@
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_debug_trace_logger.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_debug_profiler.h">
       <Filter>desktop</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\trace_logger_formatter.h">
@@ -378,11 +411,17 @@
     <ClInclude Include="..\shared\desktop\runahead.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\video_recorder.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\desktop\gui_popups.h">
       <Filter>desktop</Filter>
     </ClInclude>
+    <ClInclude Include="..\shared\desktop\gui_shader.h">
+      <Filter>desktop</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\src\ips_patch.h">
-      <Filter>core</Filter>
+      <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\license.h">
       <Filter>desktop</Filter>
@@ -429,14 +468,17 @@
     <ClInclude Include="..\shared\desktop\single_instance.h">
       <Filter>desktop</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\geartogear\geartogear_manager.h">
-      <Filter>desktop\Gear-to-Gear</Filter>
+    <ClInclude Include="..\shared\desktop\link_cable\link_cable_manager.h">
+      <Filter>desktop\Link Cable</Filter>
     </ClInclude>
-    <ClInclude Include="..\shared\desktop\geartogear\geartogear_wire.h">
-      <Filter>desktop\Gear-to-Gear</Filter>
+    <ClInclude Include="..\shared\desktop\link_cable\link_cable_wire.h">
+      <Filter>desktop\Link Cable</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\geartogear.h">
-      <Filter>desktop\Gear-to-Gear</Filter>
+      <Filter>desktop\Link Cable</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\link_cable.h">
+      <Filter>desktop\Link Cable</Filter>
     </ClInclude>
     <ClInclude Include="..\shared\desktop\keyboard.h">
       <Filter>desktop</Filter>
@@ -481,6 +523,9 @@
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\GameGearIOPorts.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\MarkIIILink.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\game_db.h">
@@ -627,6 +672,9 @@
     <ClInclude Include="..\..\src\TraceLogger.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\src\Profiler.h">
+      <Filter>src</Filter>
+    </ClInclude>
     <ClInclude Include="..\shared\dependencies\glad\glad.h">
       <Filter>dependencies\glad</Filter>
     </ClInclude>
@@ -693,7 +741,7 @@
     <Filter Include="desktop">
       <UniqueIdentifier>{b305c14e-49f4-4f2f-9d40-5b15a839fbb7}</UniqueIdentifier>
     </Filter>
-    <Filter Include="desktop\Gear-to-Gear">
+    <Filter Include="desktop\Link Cable">
       <UniqueIdentifier>{f5ca7f39-e70f-4e2e-8ef8-b25d63b25aa2}</UniqueIdentifier>
     </Filter>
     <Filter Include="dependencies\miniz">
@@ -720,5 +768,6 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Gearsystem.rc" />
+    <ResourceCompile Include="version.rc" />
   </ItemGroup>
 </Project>
