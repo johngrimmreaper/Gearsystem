@@ -46,7 +46,11 @@ static bool memory_settings_read_editor(std::istream& stream, std::vector<MemEdi
 void gui_debug_memory_init(void)
 {
     gui_debug_memory_reset();
+    gui_debug_memory_apply_settings();
+}
 
+void gui_debug_memory_apply_settings(void)
+{
     for (int i = 0; i < MEMORY_EDITOR_MAX; i++)
     {
         MemEditor::Options options;
@@ -98,8 +102,7 @@ void gui_debug_memory_reset(void)
     mem_edit[MEMORY_EDITOR_CRAM].Reset("CRAM", video->GetCRAM(), 0x40, 0);
     mem_edit[MEMORY_EDITOR_ROM].Reset("FULL ROM", cart->GetROM(), cart->GetROMSize(), 0);
 
-    if (IsValidPointer(memory->GetBootrom()))
-        mem_edit[MEMORY_EDITOR_BIOS].Reset("BIOS", memory->GetBootrom(), memory->GetBootromSize(), 0);
+    mem_edit[MEMORY_EDITOR_BIOS].Reset("BIOS", memory->GetBootrom(), memory->GetBootromSize(), 0);
 
     for (int i = MEMORY_EDITOR_ROM0_8K; i <= MEMORY_EDITOR_ROM5_8K; i++)
     {
@@ -115,7 +118,6 @@ void gui_debug_window_memory(void)
     for (int i = 0; i < MEMORY_EDITOR_MAX; i++)
     {
         mem_edit[i].SetGuiFont(gui_roboto_font);
-        mem_edit[i].WatchPopup();
         mem_edit[i].BookMarkPopup();
     }
 
@@ -193,6 +195,12 @@ void gui_debug_memory_find_bytes_window(void)
         ImGui::PushFont(gui_default_font);
         mem_edit[i].DrawFindBytesWindow();
         ImGui::PopFont();
+
+        if (mem_edit[i].ConsumeShowRequest())
+        {
+            config_debug.show_memory = true;
+            mem_edit_select = i;
+        }
     }
 }
 
@@ -200,6 +208,8 @@ void gui_debug_memory_watches_window(void)
 {
     for (int i = 0; i < MEMORY_EDITOR_MAX; i++)
     {
+        mem_edit[i].SetGuiFont(gui_roboto_font);
+        mem_edit[i].WatchPopup();
         ImGui::PushFont(gui_default_font);
         mem_edit[i].DrawWatchWindow();
         ImGui::PopFont();
@@ -231,6 +241,7 @@ void gui_debug_memory_select_all(void)
 
 void gui_debug_memory_goto(int editor, int address)
 {
+    config_debug.show_memory = true;
     mem_edit_select = editor;
     mem_edit[mem_edit_select].JumpToAddress(address);
 }
@@ -337,12 +348,12 @@ static void memory_editor_menu(void)
 
     if (ImGui::BeginMenu("Edit"))
     {
-        if (ImGui::MenuItem("Copy", "Ctrl+C"))
+        if (ImGui::MenuItem("Copy", CONFIG_PRIMARY_LABEL "C"))
         {
             gui_debug_memory_copy();
         }
 
-        if (ImGui::MenuItem("Paste", "Ctrl+V"))
+        if (ImGui::MenuItem("Paste", CONFIG_PRIMARY_LABEL "V"))
         {
             gui_debug_memory_paste();
         }
@@ -352,7 +363,7 @@ static void memory_editor_menu(void)
 
     if (ImGui::BeginMenu("Selection"))
     {
-        if (ImGui::MenuItem("Select All", "Ctrl+A"))
+        if (ImGui::MenuItem("Select All", CONFIG_PRIMARY_LABEL "A"))
         {
             mem_edit[current_mem_edit].SelectAll();
         }
@@ -484,6 +495,7 @@ bool gui_debug_memory_select_range(int editor, int start_address, int end_addres
     if (!mem_edit[editor].SetSelection(start_address, end_address))
         return false;
 
+    config_debug.show_memory = true;
     mem_edit_select = editor;
     mem_edit[editor].ScrollToAddress(start_address);
 
@@ -552,14 +564,6 @@ bool gui_debug_memory_add_watch(int editor, int address, const char* notes, int 
     }
 
     return mem_edit[editor].AddWatchDirect(address, notes, size_index);
-}
-
-void gui_debug_memory_open_watch_popup(int editor, int address, const char* notes)
-{
-    if (editor < 0 || editor >= MEMORY_EDITOR_MAX)
-        return;
-
-    mem_edit[editor].PrepareAddWatch(address, notes);
 }
 
 void gui_debug_memory_remove_watch(int editor, int address)

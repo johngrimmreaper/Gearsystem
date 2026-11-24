@@ -205,13 +205,15 @@ static const McpToolCategory kMcpToolCategories[] =
     {"symbols", "Symbols", "Add, remove, load, list, and look up debug symbols or labels."},
     {"hardware_video", "Video Hardware", "Inspect VDP registers, display timing, status, sprites, scanlines, and video state."},
     {"hardware_audio", "Audio Hardware", "Inspect SN76489 PSG and YM2413 FM audio state, channels, mixer, and sound registers."},
-    {"hardware_serial", "Serial Hardware", "Inspect Game Gear serial transfers, parallel/NMI state, physical pins, and Gear-to-Gear transport."},
+    {"hardware_serial", "Serial Hardware", "Inspect Gear-to-Gear serial/parallel state, Mark III PPI signals, physical pins, and link cable transport."},
     {"media", "Media", "Load ROMs, list recent media, load symbols, and inspect loaded cartridge/media information."},
-    {"capture", "Capture", "Capture current screenshots and SMS/Game Gear sprite images or sprite metadata."},
+    {"capture", "Capture", "Capture current screenshots, record AVI video, and SMS/Game Gear sprite images or sprite metadata."},
     {"state", "Save States", "List save slots, select a slot, save emulator state, and load emulator state."},
     {"rewind", "Rewind", "Inspect rewind buffer status and seek to rewind snapshots for time-travel debugging."},
     {"input", "Input", "Inspect, press, release, tap, or macro controller input."},
     {"trace", "Trace", "Read trace log entries and configure CPU, hardware, Gear-to-Gear, and mapper tracing."},
+    {"profiler", "Profiler", "Start, stop, or reset the function profiler and read per-function call counts and cycle statistics."},
+    {"cheats", "Cheats", "List, add, and remove Game Genie and Pro Action Replay cheat codes."},
     {"tools", "Other Tools", "Additional emulator/debugger tools that do not fit another category."}
 };
 
@@ -265,7 +267,7 @@ static const char* const kMcpAudioTools[] =
 
 static const char* const kMcpSerialTools[] =
 {
-    "get_serial_status", "reset_geartogear_metrics"
+    "get_serial_status", "reset_link_cable_metrics"
 };
 
 static const char* const kMcpMediaTools[] =
@@ -275,7 +277,7 @@ static const char* const kMcpMediaTools[] =
 
 static const char* const kMcpCaptureTools[] =
 {
-    "get_screenshot", "list_sprites", "get_sprite_image"
+    "get_screenshot", "start_video_recording", "stop_video_recording", "list_sprites", "get_sprite_image"
 };
 
 static const char* const kMcpStateTools[] =
@@ -291,12 +293,22 @@ static const char* const kMcpRewindTools[] =
 
 static const char* const kMcpInputTools[] =
 {
-    "controller_button", "controller_macro", "get_input_state"
+    "controller_button", "controller_macro", "get_input_state", "markiii_key"
 };
 
 static const char* const kMcpTraceTools[] =
 {
     "get_trace_log", "set_trace_log"
+};
+
+static const char* const kMcpProfilerTools[] =
+{
+    "set_profiler", "get_profiler_data"
+};
+
+static const char* const kMcpCheatTools[] =
+{
+    "list_cheats", "add_cheat", "remove_cheat"
 };
 
 static const McpToolCategoryTools kMcpToolCategoryTools[] =
@@ -315,7 +327,9 @@ static const McpToolCategoryTools kMcpToolCategoryTools[] =
     {"state", kMcpStateTools, MCP_ARRAY_COUNT(kMcpStateTools)},
     {"rewind", kMcpRewindTools, MCP_ARRAY_COUNT(kMcpRewindTools)},
     {"input", kMcpInputTools, MCP_ARRAY_COUNT(kMcpInputTools)},
-    {"trace", kMcpTraceTools, MCP_ARRAY_COUNT(kMcpTraceTools)}
+    {"trace", kMcpTraceTools, MCP_ARRAY_COUNT(kMcpTraceTools)},
+    {"profiler", kMcpProfilerTools, MCP_ARRAY_COUNT(kMcpProfilerTools)},
+    {"cheats", kMcpCheatTools, MCP_ARRAY_COUNT(kMcpCheatTools)}
 };
 
 const size_t kMcpSearchToolLimit = 20;
@@ -582,11 +596,6 @@ json McpToolRegistry::SearchTools(const std::string& query) const
     return tools;
 }
 
-bool McpToolRegistry::IsRouterTool(const std::string& tool_name) const
-{
-    return IsRouterToolName(tool_name);
-}
-
 bool McpToolRegistry::IsRouterTool(const std::string& tool_name, const std::string& router_tool_name) const
 {
     return NormalizeToolName(tool_name) == router_tool_name;
@@ -697,8 +706,8 @@ std::string McpToolRegistry::AliasesForTool(const std::string& tool_name) const
         StringContains(name, "audio") || StringContains(name, "ym2413") ||
         StringContains(name, "ay8910"))
         aliases += " sound audio channel tone noise volume";
-    if (StringContains(name, "serial") || StringContains(name, "geartogear"))
-        aliases += " serial link cable uart gpio pins nmi peer session shared memory game gear";
+    if (StringContains(name, "serial") || StringContains(name, "link_cable"))
+        aliases += " serial link cable uart gpio pins nmi peer session shared memory game gear mark iii joy joy ppi sk1100";
     if (StringContains(name, "breakpoint"))
         aliases += " watchpoint stop read write execute irq interrupt";
     if (StringContains(name, "memory"))
@@ -707,6 +716,10 @@ std::string McpToolRegistry::AliasesForTool(const std::string& tool_name) const
         aliases += " label labels names debug symbols";
     if (StringContains(name, "trace"))
         aliases += " log logger events cpu irq debug output";
+    if (StringContains(name, "profiler"))
+        aliases += " performance cycles timing hotspot function calls frame";
+    if (StringContains(name, "video_recording"))
+        aliases += " record movie clip capture avi mjpeg gameplay";
     if (StringContains(name, "controller"))
         aliases += " input joypad gamepad button macro tap press release";
     if (StringContains(name, "state") || StringContains(name, "rewind"))

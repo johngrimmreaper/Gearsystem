@@ -28,6 +28,7 @@
 
 static u8* buffer = NULL;
 static size_t sizes[REWIND_MAX_SNAPSHOTS] = { 0 };
+static std::stack<Processor::GS_CallStackEntry> call_stacks[REWIND_MAX_SNAPSHOTS];
 static int head = 0;
 static int count = 0;
 static int capacity = 0;
@@ -36,7 +37,6 @@ static bool active = false;
 static bool storage_dirty = true;
 static int seek_age = -1;
 static size_t slot_size = 0;
-static size_t allocated_size = 0;
 
 static int slot_at(int age);
 static int get_target_capacity(void);
@@ -121,6 +121,11 @@ void rewind_push(void)
         }
     }
 
+    if (config_debug.debug)
+        call_stacks[head] = *emu_get_core()->GetProcessor()->GetDisassemblerCallStack();
+    else
+        call_stacks[head] = std::stack<Processor::GS_CallStackEntry>();
+
     sizes[head] = size;
     head = (head + 1) % capacity;
     if (count < capacity)
@@ -142,6 +147,8 @@ bool rewind_pop(void)
 
     if (ok)
     {
+        emu_debug_state_restored();
+        *emu_get_core()->GetProcessor()->GetDisassemblerCallStack() = call_stacks[idx];
         restore_screenshot(slot, size);
         events_sync_input();
     }
@@ -174,11 +181,6 @@ int rewind_get_snapshot_count(void)
     return count;
 }
 
-size_t rewind_get_memory_usage(void)
-{
-    return allocated_size;
-}
-
 bool rewind_seek(int age)
 {
     if (age < 0 || age >= count)
@@ -194,6 +196,8 @@ bool rewind_seek(int age)
 
     if (ok)
     {
+        emu_debug_state_restored();
+        *emu_get_core()->GetProcessor()->GetDisassemblerCallStack() = call_stacks[idx];
         restore_screenshot(slot, size);
         events_sync_input();
         seek_age = age;
@@ -279,7 +283,6 @@ static bool ensure_storage(void)
 
     SafeDeleteArray(buffer);
     buffer = new_buffer;
-    allocated_size = target_size;
     slot_size = target_slot_size;
     capacity = target_capacity;
     head = 0;
@@ -300,9 +303,11 @@ static bool ensure_storage(void)
 static void release_storage(void)
 {
     SafeDeleteArray(buffer);
-    allocated_size = 0;
     slot_size = 0;
     capacity = 0;
+
+    for (int i = 0; i < REWIND_MAX_SNAPSHOTS; i++)
+        call_stacks[i] = std::stack<Processor::GS_CallStackEntry>();
 }
 
 static void truncate_to_seek_position(void)

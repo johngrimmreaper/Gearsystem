@@ -85,7 +85,6 @@ public:
     void OpenFindBytes();
     void OpenFindText();
     void AddWatch();
-    void PrepareAddWatch(int address, const char* notes);
     bool AddWatchDirect(int address, const char* notes, int size);
     void RemoveWatches();
     std::vector<Watch>* GetWatches();
@@ -93,8 +92,8 @@ public:
     void BookMarkPopup();
     void WatchPopup();
     void DrawFindBytesWindow();
+    bool ConsumeShowRequest();
     void SaveSettings(std::ostream& stream);
-    void LoadSettings(std::istream& stream);
     Options GetOptions() const;
     void SetOptions(const Options& options);
     void StepFrame();
@@ -113,6 +112,7 @@ private:
     void DrawSelectionBackground(int x, int address, ImVec2 cellPos, ImVec2 cellSize);
     void DrawSelectionAsciiBackground(int address, ImVec2 cellPos, ImVec2 cellSize);
     void DrawSelectionFrame(int x, int y, int address, ImVec2 cellPos, ImVec2 cellSize);
+    void DrawFrameRect(ImVec2 minimum, ImVec2 maximum, ImU32 color);
     void HandleSelection(int address, int row);
     void DrawCursors();
     void DrawOptions();
@@ -166,8 +166,6 @@ private:
     std::vector<Bookmark> m_bookmarks;
     bool m_watch_window;
     bool m_add_watch;
-    int m_pending_watch_address;
-    char m_pending_watch_notes[128];
     std::vector<Watch> m_watches;
     ImFont* m_gui_font;
     ImDrawList* m_draw_list;
@@ -190,6 +188,7 @@ private:
     int m_find_bytes_last_address;
     int m_find_bytes_pattern_len;
     std::vector<int> m_find_bytes_results;
+    bool m_show_request;
 };
 
 #endif /* GUI_DEBUG_MEMEDITOR_H */

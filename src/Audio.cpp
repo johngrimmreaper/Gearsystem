@@ -67,7 +67,6 @@ void Audio::LogPSGEvent(u8 value)
     e.psg.value = value;
     e.psg.event = event;
     e.psg.channel = channel;
-    e.psg.latch = state.latch;
     e.psg.attenuation = (u8)state.channels[channel].volume_reg;
     e.psg.period = (u16)state.channels[channel].period;
     if (event == TRACE_PSG_NOISE)
@@ -87,7 +86,6 @@ void Audio::LogPSGStereoEvent(u8 value)
     e.psg.value = value;
     e.psg.event = TRACE_PSG_STEREO;
     e.psg.channel = (state.latch >> 5) & 0x03;
-    e.psg.latch = state.latch;
     e.psg.attenuation = (u8)state.channels[e.psg.channel].volume_reg;
     e.psg.period = (u16)state.ggstereo;
     m_pTraceLogger->TraceLog(e);
@@ -108,7 +106,6 @@ void Audio::LogYM2413Event(u8 port, u8 value, bool accepted)
     e.ym2413.value = value;
     e.ym2413.event = event;
     e.ym2413.reg = m_pYM2413->GetSelectedRegister();
-    e.ym2413.effective = value;
     e.ym2413.accepted = accepted;
     e.ym2413.psg_enabled = m_bPSGEnabled;
     e.ym2413.fm_enabled = m_bYM2413Enabled;
@@ -260,10 +257,8 @@ void Audio::SaveState(std::ostream& stream)
     using namespace std;
 
     stream.write(reinterpret_cast<const char*> (&m_ElapsedCycles), sizeof(m_ElapsedCycles));
-    stream.write(reinterpret_cast<const char*> (m_pSampleBuffer), sizeof(blip_sample_t) * GS_AUDIO_BUFFER_SIZE);
     stream.write(reinterpret_cast<const char*> (&m_bYM2413Enabled), sizeof(m_bYM2413Enabled));
     stream.write(reinterpret_cast<const char*> (&m_bPSGEnabled), sizeof(m_bPSGEnabled));
-    stream.write(reinterpret_cast<const char*> (m_pYM2413Buffer), sizeof(s16) * GS_AUDIO_BUFFER_SIZE);
     m_pYM2413->SaveState(stream);
     m_pApu->SaveState(stream);
     m_pBuffer->SaveState(stream);
@@ -274,11 +269,17 @@ void Audio::LoadState(std::istream& stream, int version)
     using namespace std;
 
     stream.read(reinterpret_cast<char*> (&m_ElapsedCycles), sizeof(m_ElapsedCycles));
-    stream.read(reinterpret_cast<char*> (m_pSampleBuffer), sizeof(blip_sample_t) * GS_AUDIO_BUFFER_SIZE);
+
+    if (version < 110)
+        stream.read(reinterpret_cast<char*> (m_pSampleBuffer), sizeof(blip_sample_t) * GS_AUDIO_BUFFER_SIZE);
+
     stream.read(reinterpret_cast<char*> (&m_bYM2413Enabled), sizeof(m_bYM2413Enabled));
     stream.read(reinterpret_cast<char*> (&m_bPSGEnabled), sizeof(m_bPSGEnabled));
-    stream.read(reinterpret_cast<char*> (m_pYM2413Buffer), sizeof(s16) * GS_AUDIO_BUFFER_SIZE);
-    m_pYM2413->LoadState(stream);
+
+    if (version < 110)
+        stream.read(reinterpret_cast<char*> (m_pYM2413Buffer), sizeof(s16) * GS_AUDIO_BUFFER_SIZE);
+
+    m_pYM2413->LoadState(stream, version);
 
     if (version >= 103)
     {

@@ -18,11 +18,14 @@
  */
 
 #include <SDL3/SDL.h>
+#include <math.h>
+#include <float.h>
 
 #define GUI_POPUPS_IMPORT
 #include "gui_popups.h"
 #include "gui.h"
-#include "gui_debug_constants.h"
+#include "gui_actions.h"
+#include "gui_colors.h"
 #include "config.h"
 #include "application.h"
 #include "gamepad.h"
@@ -36,12 +39,19 @@
 
 static char build_info[4096] = "";
 static int info_pos = 0;
+static u64 fps_frames = 0;
+static u64 fps_window_frames = 0;
+static Uint64 fps_window_start = 0;
+static Uint64 fps_last_frame = 0;
+static float fps_value = 0.0f;
 
 static void add_build_info(const char* fmt, ...);
 static void check_hotkey_duplicates_popup(config_Hotkey* current_hotkey);
 
 void gui_popup_modal_keyboard()
 {
+    gui_center_next_window();
+
     if (ImGui::BeginPopupModal("Keyboard Configuration", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         gui_dialog_in_use = true;
@@ -67,6 +77,8 @@ void gui_popup_modal_keyboard()
 
 void gui_popup_modal_gamepad(int pad)
 {
+    gui_center_next_window();
+
     if (ImGui::BeginPopupModal("Gamepad Configuration", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         gui_dialog_in_use = true;
@@ -120,6 +132,8 @@ void gui_popup_modal_gamepad(int pad)
 
 void gui_popup_modal_hotkey()
 {
+    gui_center_next_window();
+
     if (ImGui::BeginPopupModal("Hotkey Configuration", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         gui_dialog_in_use = true;
@@ -150,6 +164,8 @@ void gui_popup_modal_hotkey()
 
 void gui_popup_modal_about(void)
 {
+    gui_center_next_window();
+
     if (ImGui::BeginPopupModal("About " GS_TITLE, NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::PushFont(gui_default_font);
@@ -314,19 +330,25 @@ void gui_popup_modal_about(void)
 
 void gui_popup_modal_load_defaults(void)
 {
+    gui_center_next_window();
+
     if (ImGui::BeginPopupModal("Load Default Settings", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("Are you sure you want to load default settings?\n\n");
+        ImGui::Text("The current game will reset.\n");
+        ImGui::Text("Boot ROM configuration will be cleared and Gear-to-Gear will disconnect.\n");
+        ImGui::Text("Active recordings will stop.\n\n");
         ImGui::Text("This action cannot be reverted.\n\n");
         ImGui::Separator();
 
+        ImGui::BeginDisabled(gui_is_rom_loading() || emu_is_media_loading());
         if (ImGui::Button("Yes", ImVec2(120, 0)))
         {
-            config_load_defaults();
-            gui_set_style();
             ImGui::CloseCurrentPopup();
             gui_dialog_in_use = false;
+            gui_action_load_defaults();
         }
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
 
@@ -358,14 +380,92 @@ void gui_show_info(void)
     ImGui::PopStyleVar();
 }
 
-void gui_show_fps(void)
+void gui_show_fps(const ImVec2& min, const ImVec2& max)
 {
-    ImGui::PushFont(gui_default_font);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f,1.00f,0.0f,1.0f));
-    ImGui::SetCursorPos(ImVec2(5.0f, config_debug.debug ? 25.0f : 5.0f));
-    ImGui::Text("FPS:  %.2f\nTIME: %.2f ms", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
-    ImGui::PopStyleColor();
-    ImGui::PopFont();
+    const float margin = 8.0f;
+    const float padding = 6.0f;
+    const float height = 22.0f;
+    const float rounding = 4.0f;
+    const float value_size = 14.0f;
+    const float unit_size = 11.0f;
+    const float unit_spacing = 3.0f;
+    const float group_spacing = 9.0f;
+
+    Uint64 now = SDL_GetPerformanceCounter();
+    double frequency = (double)SDL_GetPerformanceFrequency();
+
+    if (emu_frame_counter != fps_frames)
+    {
+        if ((fps_window_start == 0) || (emu_frame_counter < fps_frames) ||
+            (((double)(now - fps_last_frame) / frequency) > 1.0))
+        {
+            fps_window_start = now;
+            fps_window_frames = emu_frame_counter;
+        }
+        else if (((double)(now - fps_window_start) / frequency) >= 0.5)
+        {
+            double frames = (double)(emu_frame_counter - fps_window_frames);
+            fps_value = (float)((frames * frequency) / (double)(now - fps_window_start));
+            fps_window_start = now;
+            fps_window_frames = emu_frame_counter;
+        }
+
+        fps_frames = emu_frame_counter;
+        fps_last_frame = now;
+    }
+    else if (((double)(now - fps_last_frame) / frequency) > 1.0)
+        fps_value = 0.0f;
+
+    float framerate = fps_value;
+    char values[2][16];
+    const char* units[2] = { "FPS", "ms" };
+    snprintf(values[0], sizeof(values[0]), "%.2f", framerate);
+    snprintf(values[1], sizeof(values[1]), "%.2f", (framerate > 0.0f) ? (1000.0f / framerate) : 0.0f);
+
+    ImFont* font = gui_roboto_font;
+    float value_widths[2];
+    float unit_widths[2];
+    float width = (padding * 2.0f) + group_spacing;
+
+    for (int i = 0; i < 2; i++)
+    {
+        value_widths[i] = font->CalcTextSizeA(value_size, FLT_MAX, 0.0f, values[i]).x;
+        unit_widths[i] = font->CalcTextSizeA(unit_size, FLT_MAX, 0.0f, units[i]).x;
+        width += value_widths[i] + unit_spacing + unit_widths[i];
+    }
+
+    ImVec2 box_min(roundf(min.x + margin), roundf(min.y + margin));
+    ImVec2 box_max(box_min.x + roundf(width), box_min.y + height);
+
+    if (box_max.x > max.x || box_max.y > max.y)
+        return;
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImVec4 background = style.Colors[ImGuiCol_PopupBg];
+    background.w = 0.85f;
+    ImU32 value_color = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_Text]);
+    ImU32 unit_color = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_TextDisabled]);
+
+    ImFontGlyph* value_glyph = font->GetFontBaked(value_size)->FindGlyph((ImWchar)'0');
+    ImFontGlyph* unit_glyph = font->GetFontBaked(unit_size)->FindGlyph((ImWchar)'0');
+    float baseline = box_min.y + ((height + (value_glyph->Y1 - value_glyph->Y0)) * 0.5f);
+    float value_y = roundf(baseline - value_glyph->Y1);
+    float unit_y = roundf(baseline - unit_glyph->Y1);
+    float x = box_min.x + padding;
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    draw_list->PushClipRect(min, max, true);
+    draw_list->AddRectFilled(box_min, box_max, ImGui::ColorConvertFloat4ToU32(background), rounding);
+
+    for (int i = 0; i < 2; i++)
+    {
+        draw_list->AddText(font, value_size, ImVec2(roundf(x), value_y), value_color, values[i]);
+        x += value_widths[i] + unit_spacing;
+        draw_list->AddText(font, unit_size, ImVec2(roundf(x), unit_y), unit_color, units[i]);
+        x += unit_widths[i] + group_spacing;
+    }
+
+    draw_list->PopClipRect();
 }
 
 static void add_build_info(const char* fmt, ...)

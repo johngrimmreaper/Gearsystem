@@ -17,19 +17,24 @@
  *
  */
 
-#ifndef GUI_DEBUG_GEARTOGEAR_H
-#define GUI_DEBUG_GEARTOGEAR_H
+#ifndef GUI_DEBUG_PROFILER_H
+#define GUI_DEBUG_PROFILER_H
 
-#ifdef GUI_DEBUG_GEARTOGEAR_IMPORT
+#include "gearsystem.h"
+
+#ifdef GUI_DEBUG_PROFILER_IMPORT
     #define EXTERN
 #else
     #define EXTERN extern
 #endif
 
-EXTERN void gui_debug_window_geartogear_serial_registers(void);
-EXTERN void gui_debug_window_geartogear_serial_status(void);
-EXTERN void gui_debug_window_geartogear_transport(void);
+EXTERN void gui_debug_window_profiler(void);
+EXTERN void gui_debug_profiler_update(void);
+EXTERN void gui_debug_profiler_update_headless(void);
+EXTERN void gui_debug_profiler_reset(void);
+EXTERN void gui_debug_profiler_show(bool show);
+EXTERN u32 gui_debug_profiler_get_frame_cycles(void);
 
-#undef GUI_DEBUG_GEARTOGEAR_IMPORT
+#undef GUI_DEBUG_PROFILER_IMPORT
 #undef EXTERN
-#endif /* GUI_DEBUG_GEARTOGEAR_H */
+#endif /* GUI_DEBUG_PROFILER_H */

@@ -55,10 +55,6 @@
 #define NULL 0
 #endif
 
-#ifdef _WIN32
-#define BLARGG_USE_NAMESPACE 1
-#endif
-
 //#define GS_DISABLE_DISASSEMBLER
 
 #define MAX_ROM_SIZE 0x800000
@@ -70,12 +66,6 @@
 #define IsValidPointer(pointer) ((pointer) != NULL)
 
 #define UNUSED(expr) (void)(expr)
-
-#if defined(MSB_FIRST) || defined(__BIG_ENDIAN__) || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
-#define IS_BIG_ENDIAN
-#else
-#define IS_LITTLE_ENDIAN
-#endif
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -97,8 +87,6 @@ typedef uint32_t u32;
 typedef int32_t s32;
 typedef uint64_t u64;
 typedef int64_t s64;
-
-typedef void (*RamChangedCallback) (void);
 
 #define FLAG_CARRY 0x01
 #define FLAG_NEGATIVE 0x02
@@ -142,7 +130,12 @@ typedef void (*RamChangedCallback) (void);
 #define GS_MASTER_CLOCK_PAL 3546893
 #define GS_MASTER_CLOCK_PAL_SG1000 3580000
 #define GS_LINES_PER_FRAME_PAL 313
-#define GS_FRAMES_PER_SECOND_PAL 50
+
+#define GS_VDP_DOTS_PER_LINE 342
+#define GS_XTAL_CLOCKS_PER_CPU_CYCLE_NTSC 3
+#define GS_XTAL_CLOCKS_PER_COLOR_CYCLE_NTSC 3
+#define GS_XTAL_CLOCKS_PER_CPU_CYCLE_PAL 15
+#define GS_XTAL_CLOCKS_PER_COLOR_CYCLE_PAL 12
 
 #define GS_AUDIO_SAMPLE_RATE 44100
 #define GS_AUDIO_BUFFER_SIZE 2048
@@ -150,7 +143,7 @@ typedef void (*RamChangedCallback) (void);
 #define GS_AUDIO_QUEUE_SIZE 1792
 
 #define GS_SAVESTATE_MAGIC 0x03121220
-#define GS_SAVESTATE_VERSION 108
+#define GS_SAVESTATE_VERSION 111
 #define GS_SAVESTATE_MIN_VERSION 100
 #define GS_SAVESTATE_VERSION_V1 1
 
@@ -182,14 +175,6 @@ enum GS_Joypads
     Joypad_2 = 1
 };
 
-enum GS_System
-{
-    System_SMS_NTSC_USA,
-    System_SMS_NTSC_JAP,
-    System_SMS_PAL,
-    System_GG
-};
-
 enum GS_Region
 {
     Region_NTSC,
@@ -202,6 +187,17 @@ struct GS_RuntimeInfo
     int screen_height;
     GS_Region region;
     double fps;
+    float pixel_clock;
+    float line_rate;
+    int source_lines;
+    int active_region[4];
+    float chroma_origin;
+    float chroma_texel_cycles;
+    float chroma_line_cycles;
+    float chroma_frame_cycles;
+    u8 border_color[3];
+    bool border_valid;
+    int system_type;
 };
 
 enum GS_Disassembler_Syntax
