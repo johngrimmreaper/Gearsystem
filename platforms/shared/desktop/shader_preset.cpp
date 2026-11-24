@@ -42,12 +42,15 @@ static void clear_preset(ShaderPreset* preset);
 static bool load_ini(const char* path, mINI::INIStructure& ini, char* error, size_t error_size);
 static bool load_passes(const mINI::INIStructure& ini, ShaderPreset* preset, char* error, size_t error_size);
 static void load_parameters(const mINI::INIStructure& ini, ShaderPreset* preset);
+static void load_variants(const mINI::INIStructure& ini, ShaderPreset* preset);
+static int find_parameter(const ShaderPreset* preset, const char* name);
 static bool resolve_shader_path(const char* path, const char* preset_dir, char* out_path, size_t out_path_size, char* error, size_t error_size);
-static bool get_candidate_resource_root(int index, char* path, size_t path_size);
+static void scan_resource_root(const char* base_path, const char* directory);
 static bool scan_directory_for_presets(const char* directory, ShaderPresetInfo* presets, int max_presets, int* count);
 static bool add_discovered_preset(const char* path, ShaderPresetInfo* presets, int max_presets, int* count);
 static void scan_bundled_presets_once(void);
 static void sort_discovered_presets(ShaderPresetInfo* presets, int count);
+static int compare_discovered_presets(const ShaderPresetInfo* a, const ShaderPresetInfo* b);
 static bool parse_bool(const std::string& value, bool default_value);
 static int parse_int(const std::string& value, int default_value);
 static float parse_float(const std::string& value, float default_value);
@@ -58,6 +61,9 @@ static void set_error_path(char* error, size_t error_size, const char* prefix, c
 static ShaderPresetInfo bundled_presets[SHADER_PRESET_MAX_DISCOVERED];
 static int bundled_preset_count = 0;
 static bool bundled_presets_scanned = false;
+static char bundled_preset_root[SHADER_PRESET_MAX_PATH];
+static const char* const k_shader_directories[5] = { "shaders", "../shared/desktop/shaders",
+    "../../shared/desktop/shaders", "../../platforms/shared/desktop/shaders", "platforms/shared/desktop/shaders" };
 
 bool shader_preset_load(const char* path, ShaderPreset* preset, char* error, size_t error_size)
 {
@@ -96,10 +102,13 @@ bool shader_preset_load(const char* path, ShaderPreset* preset, char* error, siz
     else
         strncpy_fit(preset->name, name.c_str(), sizeof(preset->name));
 
+    strncpy_fit(preset->group, ini.get("Preset").get("Group").c_str(), sizeof(preset->group));
+
     if (!load_passes(ini, preset, error, error_size))
         return false;
 
     load_parameters(ini, preset);
+    load_variants(ini, preset);
 
     return true;
 }
@@ -140,35 +149,74 @@ bool shader_preset_get_resource_root(char* path, size_t path_size)
     if (!path || path_size == 0)
         return false;
 
-    for (int i = 0; i < 8; i++)
-    {
-        char candidate[SHADER_PRESET_MAX_PATH];
-        if (!get_candidate_resource_root(i, candidate, sizeof(candidate)))
-            continue;
-
-        if (shader_preset_path_exists(candidate))
-        {
-            strncpy_fit(path, candidate, path_size);
-            return true;
-        }
-    }
-
-    path[0] = '\0';
-    return false;
+    scan_bundled_presets_once();
+    strncpy_fit(path, bundled_preset_root, path_size);
+    return path[0] != '\0';
 }
 
-int shader_preset_scan_bundled(ShaderPresetInfo* presets, int max_presets)
+int shader_preset_get_bundled_count(void)
 {
-    if (!presets || max_presets <= 0)
-        return 0;
+    scan_bundled_presets_once();
+    return bundled_preset_count;
+}
 
+const ShaderPresetInfo* shader_preset_get_bundled(int index)
+{
     scan_bundled_presets_once();
 
-    int count = max_presets < bundled_preset_count ? max_presets : bundled_preset_count;
-    for (int i = 0; i < count; i++)
-        presets[i] = bundled_presets[i];
+    if (index < 0 || index >= bundled_preset_count)
+        return NULL;
 
-    return count;
+    return &bundled_presets[index];
+}
+
+void shader_preset_apply_variant(ShaderPreset* preset, int variant)
+{
+    if (!preset)
+        return;
+
+    if (variant < 0 || variant >= preset->variant_count)
+        variant = 0;
+
+    for (int i = 0; i < preset->parameter_count; i++)
+        preset->parameters[i].value = shader_preset_get_variant_value(preset, variant, i);
+
+    preset->variant = variant;
+}
+
+float shader_preset_get_variant_value(const ShaderPreset* preset, int variant, int parameter)
+{
+    if (!preset || parameter < 0 || parameter >= preset->parameter_count)
+        return 0.0f;
+
+    float value = preset->parameters[parameter].default_value;
+
+    if (variant < 0 || variant >= preset->variant_count)
+        return value;
+
+    const ShaderPresetVariant* values = &preset->variants[variant];
+
+    for (int i = 0; i < values->value_count; i++)
+    {
+        if (values->parameter_indices[i] == parameter)
+            value = values->values[i];
+    }
+
+    return value;
+}
+
+int shader_preset_find_variant(const ShaderPreset* preset, const char* name)
+{
+    if (!preset || !name || name[0] == '\0')
+        return -1;
+
+    for (int i = 0; i < preset->variant_count; i++)
+    {
+        if (strcmp(preset->variants[i].name, name) == 0)
+            return i;
+    }
+
+    return -1;
 }
 
 bool shader_preset_path_exists(const char* path)
@@ -209,13 +257,13 @@ bool shader_preset_resolve_config_path(const char* config_path, char* preset_pat
     if (!config_path || config_path[0] == '\0')
         return false;
 
-    ShaderPresetInfo presets[SHADER_PRESET_MAX_DISCOVERED];
-    int count = shader_preset_scan_bundled(presets, SHADER_PRESET_MAX_DISCOVERED);
-    for (int i = 0; i < count; i++)
+    scan_bundled_presets_once();
+
+    for (int i = 0; i < bundled_preset_count; i++)
     {
-        if (shader_preset_config_path_matches(config_path, presets[i].path))
+        if (shader_preset_config_path_matches(config_path, bundled_presets[i].path))
         {
-            strncpy_fit(preset_path, presets[i].path, preset_path_size);
+            strncpy_fit(preset_path, bundled_presets[i].path, preset_path_size);
             return true;
         }
     }
@@ -281,6 +329,7 @@ static bool load_passes(const mINI::INIStructure& ini, ShaderPreset* preset, cha
 
         std::string section = "Pass" + std::to_string(i);
         std::string shader_path = ini.get(section).get("Path");
+        strncpy_fit(pass->alias, ini.get(section).get("Alias").c_str(), sizeof(pass->alias));
 
         if (i == 0 && shader_path.empty())
             shader_path = ini.get("Shader").get("Path");
@@ -352,6 +401,8 @@ static void load_parameters(const mINI::INIStructure& ini, ShaderPreset* preset)
         if (!label.empty())
             strncpy_fit(parameter->label, label.c_str(), sizeof(parameter->label));
 
+        strncpy_fit(parameter->group, ini.get(section).get("Group").c_str(), sizeof(parameter->group));
+
         std::string min_value = ini.get(section).get("Min");
         std::string max_value = ini.get(section).get("Max");
         std::string step_value = ini.get(section).get("Step");
@@ -371,6 +422,57 @@ static void load_parameters(const mINI::INIStructure& ini, ShaderPreset* preset)
         parameter->default_value = parameter->value;
         preset->parameter_count++;
     }
+}
+
+static void load_variants(const mINI::INIStructure& ini, ShaderPreset* preset)
+{
+    int variant_count = parse_int(ini.get("Preset").get("Variants"), 0);
+    variant_count = CLAMP(variant_count, 0, SHADER_PRESET_MAX_VARIANTS);
+
+    for (int i = 0; i < variant_count; i++)
+    {
+        ShaderPresetVariant* variant = &preset->variants[i];
+        std::string section = "Variant" + std::to_string(i);
+        mINI::INIMap<std::string> values = ini.get(section);
+        std::string name = values.get("Name");
+
+        strncpy_fit(variant->name, name.empty() ? section.c_str() : name.c_str(), sizeof(variant->name));
+        variant->value_count = 0;
+
+        for (mINI::INIMap<std::string>::const_iterator it = values.begin(); it != values.end(); ++it)
+        {
+            if (it->first == "Name")
+                continue;
+
+            int parameter = find_parameter(preset, it->first.c_str());
+            if (parameter < 0)
+            {
+                Debug("Shader preset %s: unknown parameter %s in %s", preset->name, it->first.c_str(), section.c_str());
+                continue;
+            }
+
+            const ShaderPresetParameter* info = &preset->parameters[parameter];
+            float value = parse_float(it->second, info->default_value);
+            variant->parameter_indices[variant->value_count] = parameter;
+            variant->values[variant->value_count] = CLAMP(value, info->minimum, info->maximum);
+            variant->value_count++;
+        }
+    }
+
+    preset->variant_count = variant_count;
+    preset->default_variant = CLAMP(parse_int(ini.get("Preset").get("DefaultVariant"), 0), 0, MAX(variant_count - 1, 0));
+    shader_preset_apply_variant(preset, preset->default_variant);
+}
+
+static int find_parameter(const ShaderPreset* preset, const char* name)
+{
+    for (int i = 0; i < preset->parameter_count; i++)
+    {
+        if (strcmp(preset->parameters[i].name, name) == 0)
+            return i;
+    }
+
+    return -1;
 }
 
 static bool resolve_shader_path(const char* path, const char* preset_dir, char* out_path, size_t out_path_size, char* error, size_t error_size)
@@ -408,30 +510,18 @@ static bool resolve_shader_path(const char* path, const char* preset_dir, char* 
     return false;
 }
 
-static bool get_candidate_resource_root(int index, char* path, size_t path_size)
+static void scan_resource_root(const char* base_path, const char* directory)
 {
-    char base[SHADER_PRESET_MAX_PATH];
-    get_executable_path(base, sizeof(base));
+    char candidate[SHADER_PRESET_MAX_PATH];
+    if (!base_path || base_path[0] == '\0' || !join_path(base_path, directory, candidate, sizeof(candidate)))
+        return;
 
-    switch (index)
-    {
-        case 0:
-            return join_path(base, "shaders", path, path_size);
-        case 1:
-            return join_path(base, "../shared/desktop/shaders", path, path_size);
-        case 2:
-            return join_path(base, "../../platforms/shared/desktop/shaders", path, path_size);
-        case 3:
-            return join_path(base, "../../shared/desktop/shaders", path, path_size);
-        case 4:
-            return join_path(".", "shaders", path, path_size);
-        case 5:
-            return join_path(".", "../shared/desktop/shaders", path, path_size);
-        case 6:
-            return join_path(".", "platforms/shared/desktop/shaders", path, path_size);
-        default:
-            return false;
-    }
+    scan_directory_for_presets(candidate, bundled_presets, SHADER_PRESET_MAX_DISCOVERED, &bundled_preset_count);
+
+    if (bundled_preset_count > 0)
+        strncpy_fit(bundled_preset_root, candidate, sizeof(bundled_preset_root));
+    else
+        Debug("No shader presets in %s", candidate);
 }
 
 static bool scan_directory_for_presets(const char* directory, ShaderPresetInfo* presets, int max_presets, int* count)
@@ -441,8 +531,8 @@ static bool scan_directory_for_presets(const char* directory, ShaderPresetInfo* 
     if (!join_path(directory, "*.gshader", pattern, sizeof(pattern)))
         return false;
 
-    WIN32_FIND_DATAA find_data;
-    HANDLE handle = FindFirstFileA(pattern, &find_data);
+    WIN32_FIND_DATAW find_data;
+    HANDLE handle = FindFirstFileW(utf8_to_wstring(pattern).c_str(), &find_data);
     if (handle == INVALID_HANDLE_VALUE)
         return false;
 
@@ -450,11 +540,13 @@ static bool scan_directory_for_presets(const char* directory, ShaderPresetInfo* 
     {
         if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
         {
+            char name[SHADER_PRESET_MAX_PATH];
             char path[SHADER_PRESET_MAX_PATH];
-            if (join_path(directory, find_data.cFileName, path, sizeof(path)))
+            if (WideCharToMultiByte(CP_UTF8, 0, find_data.cFileName, -1, name, (int)sizeof(name), NULL, NULL) > 0 &&
+                join_path(directory, name, path, sizeof(path)))
                 add_discovered_preset(path, presets, max_presets, count);
         }
-    } while (*count < max_presets && FindNextFileA(handle, &find_data));
+    } while (*count < max_presets && FindNextFileW(handle, &find_data));
 
     FindClose(handle);
     return true;
@@ -484,7 +576,7 @@ static bool add_discovered_preset(const char* path, ShaderPresetInfo* presets, i
     if (*count >= max_presets)
         return false;
 
-    ShaderPreset preset;
+    static ShaderPreset preset;
     char error[512];
     if (!shader_preset_load(path, &preset, error, sizeof(error)))
     {
@@ -492,8 +584,15 @@ static bool add_discovered_preset(const char* path, ShaderPresetInfo* presets, i
         return false;
     }
 
-    strncpy_fit(presets[*count].name, preset.name, sizeof(presets[*count].name));
-    strncpy_fit(presets[*count].path, preset.preset_path, sizeof(presets[*count].path));
+    ShaderPresetInfo* info = &presets[*count];
+    strncpy_fit(info->name, preset.name, sizeof(info->name));
+    strncpy_fit(info->group, preset.group, sizeof(info->group));
+    strncpy_fit(info->path, preset.preset_path, sizeof(info->path));
+    info->variant_count = preset.variant_count;
+
+    for (int i = 0; i < preset.variant_count; i++)
+        strncpy_fit(info->variants[i], preset.variants[i].name, sizeof(info->variants[i]));
+
     (*count)++;
     return true;
 }
@@ -505,13 +604,31 @@ static void scan_bundled_presets_once(void)
 
     bundled_presets_scanned = true;
     bundled_preset_count = 0;
+    bundled_preset_root[0] = '\0';
 
-    char root[SHADER_PRESET_MAX_PATH];
-    if (!shader_preset_get_resource_root(root, sizeof(root)))
-        return;
+    char executable_path[SHADER_PRESET_MAX_PATH];
+    get_executable_path(executable_path, sizeof(executable_path));
+    char* current_path = SDL_GetCurrentDirectory();
+    const char* base_paths[3] = { SDL_GetBasePath(), executable_path, current_path };
 
-    scan_directory_for_presets(root, bundled_presets, SHADER_PRESET_MAX_DISCOVERED, &bundled_preset_count);
-    sort_discovered_presets(bundled_presets, bundled_preset_count);
+    for (int i = 0; i < 3 && bundled_preset_count == 0; i++)
+    {
+        for (int j = 0; j < 5 && bundled_preset_count == 0; j++)
+            scan_resource_root(base_paths[i], k_shader_directories[j]);
+    }
+
+    if (bundled_preset_count > 0)
+    {
+        sort_discovered_presets(bundled_presets, bundled_preset_count);
+        Debug("Found %d shader presets in %s", bundled_preset_count, bundled_preset_root);
+    }
+    else
+    {
+        Log("No shader presets found. Base path: %s, executable path: %s, current directory: %s",
+            base_paths[0] ? base_paths[0] : "unknown", executable_path, current_path ? current_path : "unknown");
+    }
+
+    SDL_free(current_path);
 }
 
 static void sort_discovered_presets(ShaderPresetInfo* presets, int count)
@@ -520,7 +637,7 @@ static void sort_discovered_presets(ShaderPresetInfo* presets, int count)
     {
         for (int j = i + 1; j < count; j++)
         {
-            if (strcmp(presets[i].name, presets[j].name) <= 0)
+            if (compare_discovered_presets(&presets[i], &presets[j]) <= 0)
                 continue;
 
             ShaderPresetInfo tmp = presets[i];
@@ -528,6 +645,18 @@ static void sort_discovered_presets(ShaderPresetInfo* presets, int count)
             presets[j] = tmp;
         }
     }
+}
+
+static int compare_discovered_presets(const ShaderPresetInfo* a, const ShaderPresetInfo* b)
+{
+    const char* a_key = a->group[0] != '\0' ? a->group : a->name;
+    const char* b_key = b->group[0] != '\0' ? b->group : b->name;
+    int result = strcmp(a_key, b_key);
+
+    if (result != 0)
+        return result;
+
+    return strcmp(a->name, b->name);
 }
 
 static bool parse_bool(const std::string& value, bool default_value)
@@ -574,7 +703,7 @@ static ShaderPresetScaleType parse_scale_type(const std::string& value, ShaderPr
     if (value.empty())
         return default_value;
 
-    if (value == "Source" || value == "source")
+    if (value == "Source" || value == "source" || value == "Original" || value == "original")
         return ShaderPresetScale_Source;
     if (value == "Viewport" || value == "viewport" || value == "FinalViewport" || value == "final_viewport")
         return ShaderPresetScale_Viewport;

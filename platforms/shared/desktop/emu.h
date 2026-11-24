@@ -21,7 +21,7 @@
 #define EMU_H
 
 #include "gearsystem.h"
-#include "geartogear/geartogear_manager.h"
+#include "link_cable/link_cable_manager.h"
 
 #ifdef EMU_IMPORT
     #define EXTERN
@@ -55,8 +55,12 @@ EXTERN Debug_Command emu_debug_command;
 EXTERN bool emu_debug_pc_changed;
 EXTERN int emu_debug_step_frames_pending;
 EXTERN u64 emu_frame_counter;
+EXTERN u64 emu_video_frame_counter;
+EXTERN bool emu_video_recording_frame_pending;
 EXTERN int emu_debug_tile_palette;
 EXTERN bool emu_audio_sync;
+EXTERN bool emu_audio_rate_control;
+EXTERN float emu_audio_ratio;
 EXTERN bool emu_debug_disable_breakpoints;
 EXTERN bool emu_debug_irq_breakpoints;
 
@@ -66,7 +70,6 @@ EXTERN void emu_update(void);
 EXTERN void emu_load_media_async(const char* file_path, Cartridge::ForceConfiguration config);
 EXTERN bool emu_is_media_loading(void);
 EXTERN bool emu_finish_media_loading(void);
-EXTERN void emu_render_current_frame(void);
 EXTERN void emu_reset_rewind_timing(void);
 EXTERN void emu_key_pressed(GS_Joypads pad, GS_Keys key);
 EXTERN void emu_key_released(GS_Joypads pad, GS_Keys key);
@@ -84,20 +87,21 @@ EXTERN void emu_resume(void);
 EXTERN bool emu_is_paused(void);
 EXTERN bool emu_is_debug_idle(void);
 EXTERN bool emu_is_empty(void);
-EXTERN void emu_reset(Cartridge::ForceConfiguration config);
+EXTERN void emu_save_persistent_data(void);
+EXTERN void emu_reset(Cartridge::ForceConfiguration config, bool save_persistent_data = true);
 EXTERN void emu_audio_mute(bool mute);
 EXTERN void emu_audio_set_master_volume(float volume);
 EXTERN void emu_audio_reset(void);
+EXTERN void emu_audio_restart(void);
 EXTERN void emu_audio_psg_volume(float volume);
 EXTERN void emu_audio_fm_volume(float volume);
-EXTERN bool emu_is_audio_enabled(void);
 EXTERN bool emu_is_audio_open(void);
 EXTERN void emu_save_ram(const char* file_path);
 EXTERN void emu_load_ram(const char* file_path, Cartridge::ForceConfiguration config);
-EXTERN void emu_save_state_slot(int index);
-EXTERN void emu_load_state_slot(int index);
-EXTERN void emu_save_state_file(const char* file_path);
-EXTERN void emu_load_state_file(const char* file_path);
+EXTERN bool emu_save_state_slot(int index);
+EXTERN bool emu_load_state_slot(int index);
+EXTERN bool emu_save_state_file(const char* file_path);
+EXTERN bool emu_load_state_file(const char* file_path);
 EXTERN void update_savestates_data(void);
 EXTERN void emu_add_cheat(const char* cheat);
 EXTERN void emu_clear_cheats();
@@ -105,6 +109,7 @@ EXTERN void emu_get_runtime(GS_RuntimeInfo& runtime);
 EXTERN double emu_get_frame_rate(void);
 EXTERN void emu_get_info(char* info, int buffer_size);
 EXTERN GearsystemCore* emu_get_core(void);
+EXTERN void emu_debug_state_restored(void);
 EXTERN void emu_debug_step_over(void);
 EXTERN void emu_debug_step_into(void);
 EXTERN void emu_debug_step_out(void);
@@ -112,7 +117,6 @@ EXTERN void emu_debug_step_frame(void);
 EXTERN void emu_debug_step_frames(int frames);
 EXTERN void emu_debug_break(void);
 EXTERN void emu_debug_continue(void);
-EXTERN bool emu_debug_halt_step_active(void);
 EXTERN void emu_set_disassembler_syntax(int syntax);
 EXTERN void emu_load_bootrom_sms(const char* file_path);
 EXTERN void emu_load_bootrom_gg(const char* file_path);
@@ -124,15 +128,18 @@ EXTERN void emu_set_overscan(int overscan);
 EXTERN void emu_set_hide_left_bar(int hide_left_bar);
 EXTERN void emu_video_no_sprite_limit(bool enabled);
 EXTERN void emu_disable_ym2413(bool disable);
-EXTERN void emu_save_screenshot(const char* file_path);
+EXTERN bool emu_save_screenshot(const char* file_path);
 EXTERN int emu_get_screenshot_png(unsigned char** out_buffer);
 EXTERN int emu_get_sprite_png(int sprite_index, unsigned char** out_buffer);
-EXTERN void emu_save_sprite(const char* file_path, int index);
-EXTERN void emu_save_background(const char* file_path);
-EXTERN void emu_save_tiles(const char* file_path);
-EXTERN void emu_start_vgm_recording(const char* file_path);
+EXTERN bool emu_save_sprite(const char* file_path, int index);
+EXTERN bool emu_save_background(const char* file_path);
+EXTERN bool emu_save_tiles(const char* file_path);
+EXTERN bool emu_start_vgm_recording(const char* file_path);
 EXTERN void emu_stop_vgm_recording(void);
 EXTERN bool emu_is_vgm_recording(void);
+EXTERN bool emu_start_video_recording(const char* file_path);
+EXTERN void emu_stop_video_recording(void);
+EXTERN bool emu_is_video_recording(void);
 EXTERN void emu_mcp_set_transport(int mode, int tcp_port, const char* tcp_address);
 EXTERN void emu_mcp_start(void);
 EXTERN void emu_mcp_stop(void);
@@ -141,16 +148,20 @@ EXTERN int emu_mcp_get_transport_mode(void);
 EXTERN const char* emu_mcp_get_http_address(void);
 EXTERN int emu_mcp_get_http_port(void);
 EXTERN void emu_mcp_pump_commands(void);
-EXTERN bool emu_geartogear_connect(int session);
-EXTERN void emu_geartogear_stop(void);
-EXTERN void emu_geartogear_pump(void);
-EXTERN bool emu_geartogear_is_active(void);
-EXTERN bool emu_geartogear_is_cable_connected(void);
-EXTERN bool emu_geartogear_is_pacing_peer(void);
-EXTERN GearToGearStatus emu_geartogear_get_status(void);
+EXTERN bool emu_link_cable_connect(int session);
+EXTERN void emu_link_cable_stop(void);
+EXTERN void emu_link_cable_pump(void);
+EXTERN GS_LinkCable_Protocol emu_link_cable_get_protocol(void);
+EXTERN bool emu_link_cable_is_active(void);
+EXTERN bool emu_link_cable_is_cable_connected(void);
+EXTERN bool emu_link_cable_is_pacing_peer(void);
+EXTERN LinkCableStatus emu_link_cable_get_status(void);
 EXTERN GS_GearToGear_DebugState emu_geartogear_get_debug_state(void);
-EXTERN void emu_geartogear_reset_metrics(void);
-EXTERN void emu_geartogear_set_normal_barrier_stall_us(u32 stall_us);
+EXTERN GS_MarkIII_LinkDebugState emu_markiii_link_get_debug_state(void);
+EXTERN void emu_link_cable_reset_metrics(void);
+EXTERN void emu_link_cable_set_normal_barrier_stall_us(u32 stall_us);
+EXTERN void emu_markiii_key_pressed(GS_MarkIII_Key key);
+EXTERN void emu_markiii_key_released(GS_MarkIII_Key key);
 
 #undef EMU_IMPORT
 #undef EXTERN

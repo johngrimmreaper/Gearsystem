@@ -36,17 +36,6 @@ struct MemoryAreaInfo
     u8* data;
 };
 
-struct RegistersSnapshot
-{
-    u16 AF, BC, DE, HL;
-    u16 AF2, BC2, DE2, HL2;
-    u16 IX, IY, SP, PC, WZ;
-    u8 I, R;
-    bool IFF1, IFF2;
-    bool Halt;
-    int InterruptMode;
-};
-
 struct BreakpointInfo
 {
     bool enabled;
@@ -103,7 +92,6 @@ public:
     std::vector<BreakpointInfo> ListBreakpoints();
 
     // Registers
-    RegistersSnapshot GetRegisters();
     void SetRegister(const std::string& name, u32 value);
 
     // Memory areas (matching debugger memory editor)
@@ -121,8 +109,10 @@ public:
     json GetPSGStatus();
     json GetYM2413Status();
     json GetSerialStatus();
-    json ResetGearToGearMetrics();
+    json ResetLinkCableMetrics();
     json GetScreenshot();
+    json StartVideoRecording(const std::string& file_path, int scale, const std::string& aspect_ratio, const std::string& quality);
+    json StopVideoRecording();
     json ListSprites();
     json GetSpriteImage(int sprite_index);
 
@@ -145,6 +135,7 @@ public:
 
     // Controller input
     json ControllerButton(int player, const std::string& button, const std::string& action);
+    json MarkIIIKey(const std::string& key, const std::string& action);
     json GetInputState();
 
     // Disassembler operations
@@ -174,9 +165,13 @@ public:
     json MemoryFind(int area, const std::string& value, bool text, bool case_sensitive);
     json GetTraceLog(s64 start, int count);
     json SetTraceLog(const json& arguments);
+    json SetProfiler(const std::string& action);
+    json GetProfilerData(const std::string& sort, int count, const std::string& filter);
 
-    // Core access
-    GearsystemCore* GetCore() { return m_core; }
+    // Cheats
+    json ListCheats();
+    json AddCheat(const std::string& code, const std::string& description);
+    json RemoveCheat(int index);
 
 private:
     GearsystemCore* m_core;

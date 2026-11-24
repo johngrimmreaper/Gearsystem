@@ -17,6 +17,7 @@
  *
  */
 
+#include <math.h>
 #include <string>
 #include "GearsystemCore.h"
 #include "Memory.h"
@@ -52,6 +53,7 @@
 #include "GameGearIOPorts.h"
 #include "BootromMemoryRule.h"
 #include "TraceLogger.h"
+#include "Profiler.h"
 #include "common.h"
 #include "memory_stream.h"
 
@@ -91,8 +93,10 @@ GearsystemCore::GearsystemCore()
     InitPointer(m_pFrameBuffer);
     InitPointer(m_pIratahackMemoryRule);
     InitPointer(m_trace_logger);
+    InitPointer(m_profiler);
     m_master_clock_cycles = 0;
-    m_geartogear_cycles = 0;
+    m_link_cable_cycles = 0;
+    m_link_cable_protocol = LinkCableProtocolNone;
     m_bPaused = true;
     m_pixelFormat = GS_PIXEL_RGBA8888;
     m_GlassesConfig = GearsystemCore::GlassesBothEyes;
@@ -133,6 +137,7 @@ GearsystemCore::~GearsystemCore()
     SafeDelete(m_pProcessor);
     SafeDelete(m_pMemory);
     SafeDelete(m_trace_logger);
+    SafeDelete(m_profiler);
 }
 
 void GearsystemCore::Init(GS_Color_Format pixelFormat)
@@ -165,6 +170,8 @@ void GearsystemCore::Init(GS_Color_Format pixelFormat)
     m_pInput->SetTraceLogger(m_trace_logger);
     m_pSmsIOPorts->SetTraceLogger(m_trace_logger);
     m_pGameGearIOPorts->SetTraceLogger(m_trace_logger);
+    m_profiler = new Profiler(&m_master_clock_cycles);
+    m_pProcessor->SetProfiler(m_profiler);
 #endif
 
     InitMemoryRules();
@@ -190,20 +197,9 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
 
         do
         {
-            u64 link_start_cycle = m_geartogear_cycles;
-            if (IsNativeGameGearMode())
-                m_pGameGearIOPorts->BeginInstruction(link_start_cycle);
-
-            unsigned int clockCycles = debug_enable && debug->step_debugger ? m_pProcessor->RunInstruction() : m_pProcessor->RunFor(1);
+            unsigned int clockCycles;
+            vblank = RunCycle(pFrameBuffer, clockCycles, debug_enable && debug->step_debugger);
             instruction_completed = true;
-            m_master_clock_cycles += clockCycles;
-            m_geartogear_cycles += clockCycles;
-
-            if (IsNativeGameGearMode())
-                m_pGameGearIOPorts->EndInstruction(m_geartogear_cycles);
-
-            vblank = m_pVideo->Tick(clockCycles);
-            m_pAudio->Tick(clockCycles);
             totalClocks += clockCycles;
 
             if (debug_enable)
@@ -229,7 +225,7 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
         }
         while (!vblank);
 
-        m_pAudio->EndFrame(pSampleBuffer, pSampleCount);
+        EndFrame(pSampleBuffer, pSampleCount);
         if (render)
             RenderFrameBuffer(pFrameBuffer);
 
@@ -241,19 +237,8 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
 
         do
         {
-            u64 link_start_cycle = m_geartogear_cycles;
-            if (IsNativeGameGearMode())
-                m_pGameGearIOPorts->BeginInstruction(link_start_cycle);
-
-            unsigned int clockCycles = m_pProcessor->RunFor(1);
-            m_master_clock_cycles += clockCycles;
-            m_geartogear_cycles += clockCycles;
-
-            if (IsNativeGameGearMode())
-                m_pGameGearIOPorts->EndInstruction(m_geartogear_cycles);
-
-            vblank = m_pVideo->Tick(clockCycles);
-            m_pAudio->Tick(clockCycles);
+            unsigned int clockCycles;
+            vblank = RunCycle(pFrameBuffer, clockCycles);
             totalClocks += clockCycles;
 
             if (totalClocks > 702240)
@@ -261,7 +246,7 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
         }
         while (!vblank);
 
-        m_pAudio->EndFrame(pSampleBuffer, pSampleCount);
+        EndFrame(pSampleBuffer, pSampleCount);
         if (render)
             RenderFrameBuffer(pFrameBuffer);
 
@@ -270,6 +255,25 @@ bool GearsystemCore::RunToVBlank(u8* pFrameBuffer, s16* pSampleBuffer, int* pSam
     }
 
     return false;
+}
+
+void GearsystemCore::EndFrame(s16* sample_buffer, int* sample_count)
+{
+    m_pAudio->EndFrame(sample_buffer, sample_count);
+}
+
+void GearsystemCore::SaveLinkCableState(std::ostream& stream)
+{
+    stream.write((const char*)&m_master_clock_cycles, sizeof(m_master_clock_cycles));
+    stream.write((const char*)&m_link_cable_cycles, sizeof(m_link_cable_cycles));
+    m_pGameGearIOPorts->SaveLinkCableState(stream);
+}
+
+void GearsystemCore::LoadLinkCableState(std::istream& stream)
+{
+    stream.read((char*)&m_master_clock_cycles, sizeof(m_master_clock_cycles));
+    stream.read((char*)&m_link_cable_cycles, sizeof(m_link_cable_cycles));
+    m_pGameGearIOPorts->LoadLinkCableState(stream);
 }
 
 bool GearsystemCore::LoadROM(const char* szFilePath, Cartridge::ForceConfiguration* config, bool softpatching)
@@ -327,55 +331,6 @@ bool GearsystemCore::LoadROMFromBuffer(const u8* buffer, int size, Cartridge::Fo
         return false;
 }
 
-void GearsystemCore::SaveMemoryDump()
-{
-    if (m_pCartridge->IsReady() && (strlen(m_pCartridge->GetFilePath()) > 0))
-    {
-        using namespace std;
-
-        string path = string(m_pCartridge->GetFilePath()) + ".dump";
-
-        Log("Saving Memory Dump %s...", path.c_str());
-
-        m_pMemory->MemoryDump(path.c_str());
-
-        Debug("Memory Dump Saved");
-    }
-}
-
-void GearsystemCore::SaveDisassembledROM()
-{
-    GS_Disassembler_Record** romMap = m_pMemory->GetAllDisassemblerRecords();
-
-    if (m_pCartridge->IsReady() && (strlen(m_pCartridge->GetFilePath()) > 0) && IsValidPointer(romMap))
-    {
-        using namespace std;
-
-        string path = string(m_pCartridge->GetFilePath()) + ".dis";
-
-        Log("Saving Disassembled ROM %s...", path.c_str());
-
-        ofstream myfile;
-        open_ofstream_utf8(myfile, path.c_str(), ios::out | ios::trunc);
-
-        if (myfile.is_open())
-        {
-            for (int i = 0; i < 65536; i++)
-            {
-                if (IsValidPointer(romMap[i]) && (romMap[i]->name[0] != 0))
-                {
-                    myfile << "0x" << hex << i << "\t " << romMap[i]->name << "\n";
-                    i += (romMap[i]->size - 1);
-                }
-            }
-
-            myfile.close();
-        }
-
-        Debug("Disassembled ROM Saved");
-    }
-}
-
 bool GearsystemCore::GetRuntimeInfo(GS_RuntimeInfo& runtime_info)
 {
     bool pal = m_pCartridge->IsPAL();
@@ -383,6 +338,17 @@ bool GearsystemCore::GetRuntimeInfo(GS_RuntimeInfo& runtime_info)
     int lines_per_frame = pal ? GS_LINES_PER_FRAME_PAL : GS_LINES_PER_FRAME_NTSC;
 
     runtime_info.fps = master_clock / (GS_CYCLES_PER_LINE * lines_per_frame);
+    runtime_info.pixel_clock = 0.0f;
+    runtime_info.line_rate = 0.0f;
+    runtime_info.chroma_origin = 0.0f;
+    runtime_info.chroma_texel_cycles = 0.0f;
+    runtime_info.chroma_line_cycles = 0.0f;
+    runtime_info.chroma_frame_cycles = 0.0f;
+    runtime_info.border_color[0] = 0;
+    runtime_info.border_color[1] = 0;
+    runtime_info.border_color[2] = 0;
+    runtime_info.border_valid = false;
+    runtime_info.system_type = 0;
 
     if (m_pCartridge->IsReady())
     {
@@ -396,21 +362,64 @@ bool GearsystemCore::GetRuntimeInfo(GS_RuntimeInfo& runtime_info)
             runtime_info.screen_width = GS_RESOLUTION_SMS_WIDTH - m_pVideo->GetHideLeftBarOffset();
             runtime_info.screen_height = m_pVideo->IsExtendedMode224() ? GS_RESOLUTION_SMS_HEIGHT_EXTENDED : GS_RESOLUTION_SMS_HEIGHT;
 
-            if (m_pVideo->GetOverscan() == Video::OverscanFull284)
-                runtime_info.screen_width = GS_RESOLUTION_SMS_WIDTH + GS_RESOLUTION_SMS_OVERSCAN_H_284_L + GS_RESOLUTION_SMS_OVERSCAN_H_284_R;
-            if (m_pVideo->GetOverscan() == Video::OverscanFull320)
-                runtime_info.screen_width = GS_RESOLUTION_SMS_WIDTH + GS_RESOLUTION_SMS_OVERSCAN_H_320_L + GS_RESOLUTION_SMS_OVERSCAN_H_320_R;
-            if (m_pVideo->GetOverscan() != Video::OverscanDisabled)
-                runtime_info.screen_height = GS_RESOLUTION_SMS_HEIGHT + (2 * (m_pCartridge->IsPAL() ? GS_RESOLUTION_SMS_OVERSCAN_V_PAL : GS_RESOLUTION_SMS_OVERSCAN_V));
+            if (!m_pCartridge->IsGameGear())
+            {
+                if (m_pVideo->GetOverscan() == Video::OverscanFull284)
+                    runtime_info.screen_width = GS_RESOLUTION_SMS_WIDTH + GS_RESOLUTION_SMS_OVERSCAN_H_284_L + GS_RESOLUTION_SMS_OVERSCAN_H_284_R;
+                if (m_pVideo->GetOverscan() == Video::OverscanFull320)
+                    runtime_info.screen_width = GS_RESOLUTION_SMS_WIDTH + GS_RESOLUTION_SMS_OVERSCAN_H_320_L + GS_RESOLUTION_SMS_OVERSCAN_H_320_R;
+                if (m_pVideo->GetOverscan() != Video::OverscanDisabled)
+                    runtime_info.screen_height = GS_RESOLUTION_SMS_HEIGHT + (2 * (m_pCartridge->IsPAL() ? GS_RESOLUTION_SMS_OVERSCAN_V_PAL : GS_RESOLUTION_SMS_OVERSCAN_V));
+            }
         }
 
         runtime_info.region = m_pCartridge->IsPAL() ? Region_PAL : Region_NTSC;
+        runtime_info.source_lines = runtime_info.screen_height;
+        runtime_info.active_region[0] = 0;
+        runtime_info.active_region[1] = 0;
+        runtime_info.active_region[2] = runtime_info.screen_width;
+        runtime_info.active_region[3] = runtime_info.screen_height;
+
+        if (m_pCartridge->IsSG1000())
+            runtime_info.system_type = 2;
+        else if (m_pCartridge->IsGameGear())
+            runtime_info.system_type = m_pCartridge->IsGameGearInSMSMode() ? 3 : 1;
+
+        if (!m_pCartridge->IsGameGear())
+        {
+            runtime_info.pixel_clock = (float)(master_clock * GS_VDP_DOTS_PER_LINE / GS_CYCLES_PER_LINE / 1000000.0);
+            runtime_info.line_rate = (float)(master_clock / GS_CYCLES_PER_LINE / 1000.0);
+            m_pVideo->GetActiveRegion(&runtime_info.active_region[0], &runtime_info.active_region[1],
+                &runtime_info.active_region[2], &runtime_info.active_region[3]);
+            m_pVideo->GetBorderColor(runtime_info.border_color);
+            runtime_info.border_valid = true;
+
+            if (!pal || !m_pCartridge->IsSG1000())
+            {
+                int cpu_xtal_clocks = pal ? GS_XTAL_CLOCKS_PER_CPU_CYCLE_PAL : GS_XTAL_CLOCKS_PER_CPU_CYCLE_NTSC;
+                int color_xtal_clocks = pal ? GS_XTAL_CLOCKS_PER_COLOR_CYCLE_PAL : GS_XTAL_CLOCKS_PER_COLOR_CYCLE_NTSC;
+                int line_xtal_clocks = GS_CYCLES_PER_LINE * cpu_xtal_clocks;
+                int frame_xtal_clocks = lines_per_frame * line_xtal_clocks;
+                double origin = (double)(m_pVideo->GetOutputOriginX() * line_xtal_clocks) / (double)(color_xtal_clocks * GS_VDP_DOTS_PER_LINE);
+
+                runtime_info.chroma_origin = (float)(origin - floor(origin));
+                runtime_info.chroma_texel_cycles = (float)line_xtal_clocks / (float)color_xtal_clocks / (float)GS_VDP_DOTS_PER_LINE;
+                runtime_info.chroma_line_cycles = (float)line_xtal_clocks / (float)color_xtal_clocks;
+                runtime_info.chroma_frame_cycles = (float)(frame_xtal_clocks % color_xtal_clocks) / (float)color_xtal_clocks;
+            }
+        }
+
         return true;
     }
 
     runtime_info.screen_width = GS_RESOLUTION_MAX_WIDTH;
     runtime_info.screen_height = GS_RESOLUTION_MAX_HEIGHT;
     runtime_info.region = Region_NTSC;
+    runtime_info.source_lines = runtime_info.screen_height;
+    runtime_info.active_region[0] = 0;
+    runtime_info.active_region[1] = 0;
+    runtime_info.active_region[2] = runtime_info.screen_width;
+    runtime_info.active_region[3] = runtime_info.screen_height;
 
     return false;
 }
@@ -460,26 +469,97 @@ void GearsystemCore::SetMasterClockCycles(u64 cycles)
     m_master_clock_cycles = cycles;
 }
 
-void GearsystemCore::SetGearToGearCallbacks(
-    GS_GearToGear_Publish_Callback publish_callback,
-    GS_GearToGear_Sample_Callback sample_callback,
-    GS_GearToGear_Poll_Callback poll_callback,
-    GS_GearToGear_Fence_Callback fence_callback,
-    GS_GearToGear_Sync_Callback sync_callback,
-    void* user_data)
+void GearsystemCore::SetLinkCableCallbacks(GS_LinkCable_Publish_Callback publish_callback,
+    GS_LinkCable_Sample_Callback sample_callback, GS_LinkCable_Poll_Callback poll_callback,
+    GS_LinkCable_Fence_Callback fence_callback, GS_LinkCable_Sync_Callback sync_callback, void* user_data)
 {
-    m_pGameGearIOPorts->SetGearToGearCallbacks(publish_callback,
-        sample_callback, poll_callback, fence_callback, sync_callback, user_data);
+    m_pGameGearIOPorts->SetGearToGearCallbacks(publish_callback, sample_callback,
+        poll_callback, fence_callback, sync_callback, user_data);
+    m_pSmsIOPorts->GetMarkIIILink()->SetCallbacks(publish_callback, sample_callback,
+        poll_callback, fence_callback, sync_callback, user_data);
 }
 
-void GearsystemCore::SetGearToGearTransportActive(bool active, u64 cycle)
+void GearsystemCore::SetLinkCableProtocol(GS_LinkCable_Protocol protocol, u64 cycle)
 {
-    m_pGameGearIOPorts->SetGearToGearTransportActive(active, cycle);
+    if (protocol != LinkCableProtocolNone && protocol != GetSupportedLinkCableProtocol())
+        protocol = LinkCableProtocolNone;
+
+    if (protocol == m_link_cable_protocol)
+        return;
+
+    if (m_link_cable_protocol == LinkCableProtocolGearToGear)
+    {
+        if (m_pGameGearIOPorts->IsGearToGearCableConnected())
+            m_pGameGearIOPorts->SetGearToGearCableConnected(false, cycle);
+
+        m_pGameGearIOPorts->SetGearToGearTransportActive(false, cycle);
+    }
+    else if (m_link_cable_protocol == LinkCableProtocolMarkIII)
+    {
+        if (m_pSmsIOPorts->GetMarkIIILink()->IsCableConnected())
+            m_pSmsIOPorts->GetMarkIIILink()->SetCableConnected(false, cycle);
+
+        m_pSmsIOPorts->GetMarkIIILink()->SetTransportActive(false, cycle);
+        m_pSmsIOPorts->GetMarkIIILink()->SetPeripheralAttached(false, cycle);
+    }
+
+    m_link_cable_protocol = protocol;
+
+    if (m_link_cable_protocol == LinkCableProtocolMarkIII)
+        m_pSmsIOPorts->GetMarkIIILink()->SetPeripheralAttached(true, cycle);
 }
 
-void GearsystemCore::SetGearToGearCableConnected(bool connected, u64 cycle)
+void GearsystemCore::SetLinkCableTransportActive(bool active, u64 cycle)
 {
-    m_pGameGearIOPorts->SetGearToGearCableConnected(connected, cycle);
+    if (m_link_cable_protocol == LinkCableProtocolGearToGear)
+        m_pGameGearIOPorts->SetGearToGearTransportActive(active, cycle);
+    else if (m_link_cable_protocol == LinkCableProtocolMarkIII)
+        m_pSmsIOPorts->GetMarkIIILink()->SetTransportActive(active, cycle);
+}
+
+void GearsystemCore::SetLinkCableConnected(bool connected, u64 cycle)
+{
+    if (m_link_cable_protocol == LinkCableProtocolGearToGear)
+        m_pGameGearIOPorts->SetGearToGearCableConnected(connected, cycle);
+    else if (m_link_cable_protocol == LinkCableProtocolMarkIII)
+        m_pSmsIOPorts->GetMarkIIILink()->SetCableConnected(connected, cycle);
+}
+
+GS_LinkCable_Protocol GearsystemCore::GetSupportedLinkCableProtocol() const
+{
+    if (!m_pCartridge->IsReady())
+        return LinkCableProtocolNone;
+
+    if (IsNativeGameGearMode())
+        return LinkCableProtocolGearToGear;
+
+    if (!m_pCartridge->IsGameGear() && !m_pCartridge->IsSG1000() &&
+        m_pCartridge->GetZone() == Cartridge::CartridgeJapanSMS)
+    {
+        return LinkCableProtocolMarkIII;
+    }
+
+    return LinkCableProtocolNone;
+}
+
+GS_LinkCable_Protocol GearsystemCore::GetDetectedLinkCableProtocol() const
+{
+    GS_LinkCable_Protocol protocol = GetSupportedLinkCableProtocol();
+
+    if (protocol == LinkCableProtocolMarkIII && !(m_pCartridge->GetFeatures() & GS_DB_FEATURE_MARKIII_LINK))
+        return LinkCableProtocolNone;
+
+    return protocol;
+}
+
+void GearsystemCore::MarkIIIKeyPressed(GS_MarkIII_Key key)
+{
+    m_pSmsIOPorts->GetMarkIIILink()->KeyPressed(key);
+}
+
+void GearsystemCore::MarkIIIKeyReleased(GS_MarkIII_Key key)
+{
+    m_pSmsIOPorts->GetMarkIIILink()->KeyReleased(key);
 }
 
 bool GearsystemCore::IsNativeGameGearMode() const
@@ -488,19 +568,24 @@ bool GearsystemCore::IsNativeGameGearMode() const
         !m_pCartridge->IsGameGearInSMSMode();
 }
 
-u64 GearsystemCore::GetGearToGearCycles() const
-{
-    return m_geartogear_cycles;
-}
-
 GameGearIOPorts* GearsystemCore::GetGameGearIOPorts()
 {
     return m_pGameGearIOPorts;
 }
 
+MarkIIILink* GearsystemCore::GetMarkIIILink()
+{
+    return m_pSmsIOPorts->GetMarkIIILink();
+}
+
 TraceLogger* GearsystemCore::GetTraceLogger()
 {
     return m_trace_logger;
+}
+
+Profiler* GearsystemCore::GetProfiler()
+{
+    return m_profiler;
 }
 
 void GearsystemCore::KeyPressed(GS_Joypads joypad, GS_Keys key)
@@ -635,11 +720,6 @@ void GearsystemCore::ResetROMPreservingRAM(Cartridge::ForceConfiguration* config
             ResetROM(config);
         }
     }
-}
-
-void GearsystemCore::ResetSound()
-{
-    m_pAudio->Reset(m_pCartridge->IsPAL());
 }
 
 void GearsystemCore::SaveRam()
@@ -808,14 +888,15 @@ bool GearsystemCore::SaveState(const char* path, int index, bool screenshot)
     using namespace std;
 
     string full_path = GetSaveStatePath(path, index);
+    string temp_path = full_path + ".tmp";
     Debug("Saving state to %s...", full_path.c_str());
 
     ofstream stream;
-    open_ofstream_utf8(stream, full_path.c_str(), ios::out | ios::binary);
+    open_ofstream_utf8(stream, temp_path.c_str(), ios::out | ios::binary);
 
     if (!stream.is_open())
     {
-        Error("Failed to open save state file for writing: %s", full_path.c_str());
+        Error("Failed to open save state file for writing: %s", temp_path.c_str());
         return false;
     }
 
@@ -823,14 +904,16 @@ bool GearsystemCore::SaveState(const char* path, int index, bool screenshot)
     if (!SaveState(stream, size, screenshot))
     {
         stream.close();
+        remove_file_utf8(temp_path.c_str());
         Error("Failed to save state to file: %s", full_path.c_str());
         return false;
     }
 
     stream.close();
 
-    if (!stream.good())
+    if (!stream.good() || !rename_file_utf8(temp_path.c_str(), full_path.c_str()))
     {
+        remove_file_utf8(temp_path.c_str());
         Error("Failed to write save state file: %s", full_path.c_str());
         return false;
     }
@@ -904,6 +987,7 @@ bool GearsystemCore::SaveState(std::ostream& stream, size_t& size, bool screensh
     m_pProcessor->GetIOPOrts()->SaveState(stream);
 
 #if defined(__LIBRETRO__)
+    UNUSED(screenshot);
     GS_SaveState_Header_Libretro header;
     header.magic = GS_SAVESTATE_MAGIC;
     header.version = GS_SAVESTATE_VERSION;
@@ -1140,7 +1224,7 @@ bool GearsystemCore::LoadStateV1(std::istream& stream, size_t size)
         return false;
     }
 
-    if (v1_version != GS_SAVESTATE_VERSION_V1)
+    if (v1_version != GS_SAVESTATE_VERSION_V1 && v1_version != 100)
     {
         Error("Invalid V1 save state version: %d", v1_version);
         return false;
@@ -1157,7 +1241,7 @@ bool GearsystemCore::LoadStateV1(std::istream& stream, size_t size)
     m_pMemory->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pProcessor->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pAudio->LoadStateV1(stream);
-    m_pVideo->LoadState(stream);
+    m_pVideo->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pInput->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pMemory->GetCurrentRule()->LoadState(stream, GS_SAVESTATE_VERSION_V1);
     m_pProcessor->GetIOPOrts()->LoadState(stream, GS_SAVESTATE_VERSION_V1);
@@ -1204,7 +1288,8 @@ bool GearsystemCore::GetSaveStateHeader(int index, const char* path, GS_SaveStat
         stream.read(reinterpret_cast<char*>(&v1_size), sizeof(v1_size));
         stream.close();
 
-        if (v1_magic != GS_SAVESTATE_MAGIC || v1_version != GS_SAVESTATE_VERSION_V1 || v1_size != savestate_size)
+        if (v1_magic != GS_SAVESTATE_MAGIC || (v1_version != GS_SAVESTATE_VERSION_V1 && v1_version != 100) ||
+            v1_size != savestate_size)
             return false;
 
         memset(header, 0, sizeof(GS_SaveState_Header));
@@ -1244,7 +1329,8 @@ bool GearsystemCore::GetSaveStateHeader(int index, const char* path, GS_SaveStat
             stream.read(reinterpret_cast<char*>(&v1_size), sizeof(v1_size));
             stream.close();
 
-            if (v1_magic != GS_SAVESTATE_MAGIC || v1_version != GS_SAVESTATE_VERSION_V1 || v1_size != savestate_size)
+            if (v1_magic != GS_SAVESTATE_MAGIC || (v1_version != GS_SAVESTATE_VERSION_V1 && v1_version != 100) ||
+                v1_size != savestate_size)
                 return false;
 
             memset(header, 0, sizeof(GS_SaveState_Header));
@@ -1351,11 +1437,6 @@ void GearsystemCore::ClearCheats()
     m_pProcessor->ClearProActionReplayCheats();
     if (m_pCartridge->IsReady())
         m_pMemory->LoadSlotsFromROM(m_pCartridge->GetROM(), m_pCartridge->GetROMSize());
-}
-
-void GearsystemCore::SetRamModificationCallback(RamChangedCallback callback)
-{
-    m_pRamChangedCallback = callback;
 }
 
 void GearsystemCore::InitMemoryRules()
@@ -1541,10 +1622,14 @@ void GearsystemCore::Reset()
     m_pEeprom93C46MemoryRule->Reset();
     m_pBootromMemoryRule->Reset();
     m_pGameGearIOPorts->Reset();
-    m_pGameGearIOPorts->RebaseGearToGear(m_geartogear_cycles);
+    m_pGameGearIOPorts->RebaseGearToGear(m_link_cable_cycles);
     m_pSmsIOPorts->Reset();
+    m_pSmsIOPorts->GetMarkIIILink()->Rebase(m_link_cable_cycles);
     m_bPaused = false;
     m_master_clock_cycles = 0;
+
+    if (IsValidPointer(m_profiler))
+        m_profiler->Reset();
 }
 
 void GearsystemCore::RenderFrameBuffer(u8* finalFrameBuffer)

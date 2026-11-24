@@ -50,7 +50,37 @@ struct OglShaderChainUniforms
     int viewport_width;
     int viewport_height;
     float original_aspect;
+    float framebuffer_scale;
     float background_color[3];
+};
+
+struct OglShaderChainFrameInfo
+{
+    int frame_direction;
+    float original_fps;
+    float pixel_clock;
+    float line_rate;
+    float source_lines;
+    float chroma_origin;
+    float chroma_texel_cycles;
+    float chroma_line_cycles;
+    float chroma_frame_cycles;
+    float active_region[4];
+    float border_color[4];
+    int system_type;
+    int video_mode;
+    int rotation;
+    int interlaced;
+    int field_parity;
+    int display_enabled;
+    int core_flags;
+};
+
+enum OglShaderChainCoreFlags
+{
+    OglShaderChainCoreFlag_ColorCorrection = 1,
+    OglShaderChainCoreFlag_LowPass = 2,
+    OglShaderChainCoreFlag_Composite = 4
 };
 
 struct OglShaderChainSourceTexture
@@ -79,7 +109,6 @@ EXTERN bool ogl_shader_chain_resize_pass_texture(const OglShaderChainFramebuffer
 EXTERN bool ogl_shader_chain_load_preset(const char* path);
 EXTERN void ogl_shader_chain_unload_preset(void);
 EXTERN bool ogl_shader_chain_has_preset(void);
-EXTERN uint32_t ogl_shader_chain_get_preset_program(void);
 EXTERN uint32_t ogl_shader_chain_get_preset_pass_program(int index);
 EXTERN const char* ogl_shader_chain_get_preset_name(void);
 EXTERN const char* ogl_shader_chain_get_preset_path(void);
@@ -89,17 +118,23 @@ EXTERN int ogl_shader_chain_get_preset_pass_count(void);
 EXTERN bool ogl_shader_chain_get_preset_pass_filter_linear(int index);
 EXTERN bool ogl_shader_chain_get_preset_pass_float_framebuffer(int index);
 EXTERN bool ogl_shader_chain_get_preset_pass_uses_history(int index);
-EXTERN bool ogl_shader_chain_get_preset_pass_uses_original_sampler(int index);
-EXTERN bool ogl_shader_chain_get_preset_pass_uses_feedback_sampler(int index);
-EXTERN bool ogl_shader_chain_get_preset_pass_uses_history_sampler(int pass_index, int history_index);
-EXTERN bool ogl_shader_chain_get_preset_pass_uses_pass_output_sampler(int pass_index, int output_index);
 EXTERN bool ogl_shader_chain_preset_uses_feedback(void);
 EXTERN void ogl_shader_chain_get_preset_pass_output_size(int index, const OglShaderChainPassSize* pass_size, int* width, int* height);
 EXTERN int ogl_shader_chain_get_parameter_count(void);
 EXTERN const ShaderPresetParameter* ogl_shader_chain_get_parameter(int index);
 EXTERN bool ogl_shader_chain_set_parameter(int index, float value);
 EXTERN bool ogl_shader_chain_restore_default_parameters(void);
+EXTERN int ogl_shader_chain_get_variant_count(void);
+EXTERN const char* ogl_shader_chain_get_variant_name(int index);
+EXTERN int ogl_shader_chain_get_variant(void);
+EXTERN bool ogl_shader_chain_set_variant(int index);
+EXTERN int ogl_shader_chain_find_variant(const char* name);
+EXTERN void ogl_shader_chain_reset_frame_info(OglShaderChainFrameInfo* info, int source_width, int source_height);
+EXTERN void ogl_shader_chain_begin_frame(const OglShaderChainFrameInfo* info, int advanced_frames);
+EXTERN bool ogl_shader_chain_update_line_clock_texture(const float* clocks, int count);
+EXTERN bool ogl_shader_chain_update_index_texture(const uint8_t* indices, int width, int height);
 EXTERN void ogl_shader_chain_apply_preset_uniforms(int index, const OglShaderChainUniforms* uniforms);
+EXTERN void ogl_shader_chain_bind_preset_textures(int index, uint32_t input_texture);
 
 EXTERN uint32_t ogl_shader_chain_get_source_texture(void);
 EXTERN uint32_t ogl_shader_chain_get_pass_texture(void);
@@ -107,12 +142,9 @@ EXTERN uint32_t ogl_shader_chain_get_pass_framebuffer(void);
 EXTERN uint32_t ogl_shader_chain_get_feedback_texture(void);
 EXTERN uint32_t ogl_shader_chain_get_feedback_framebuffer(void);
 EXTERN bool ogl_shader_chain_resize_intermediate_texture(int index, const OglShaderChainFramebufferTexture* texture);
-EXTERN bool ogl_shader_chain_store_pass_history(int index, uint32_t texture, int width, int height, bool filter_linear, bool float_framebuffer);
 EXTERN uint32_t ogl_shader_chain_get_intermediate_texture(int index);
 EXTERN uint32_t ogl_shader_chain_get_intermediate_framebuffer(int index);
 EXTERN uint32_t ogl_shader_chain_get_pass_history_texture(int pass_index, int history_index);
-EXTERN int ogl_shader_chain_get_intermediate_width(int index);
-EXTERN int ogl_shader_chain_get_intermediate_height(int index);
 EXTERN int ogl_shader_chain_get_pass_width(void);
 EXTERN int ogl_shader_chain_get_pass_height(void);
 

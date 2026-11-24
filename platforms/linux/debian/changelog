@@ -1,3 +1,12 @@
+gearsystem (3.9.26-1) UNRELEASED; urgency=medium
+
+  * New upstream release 3.9.26.
+  * Install upstream icons at all supported resolutions.
+  * Video timing shader uniforms and debugger improvements.
+  * Upstream bug fixes and improvements.
+
+ -- Reaper <JohnGrimmReaper@disroot.org>  Tue, 24 Nov 2026 02:31:52 +0000
+
 gearsystem (3.9.18-1) UNRELEASED; urgency=medium
 
   * New iOS App (in development)

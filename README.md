@@ -30,11 +30,11 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     <tr>
       <td rowspan="2"><strong>Windows</strong></td>
       <td>Desktop x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-windows-x64.zip">Gearsystem-3.9.18-desktop-windows-x64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-windows-x64.zip">Gearsystem-3.9.26-desktop-windows-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-windows-arm64.zip">Gearsystem-3.9.18-desktop-windows-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-windows-arm64.zip">Gearsystem-3.9.26-desktop-windows-arm64.zip</a></td>
     </tr>
     <tr>
       <td rowspan="3"><strong>macOS</strong></td>
@@ -43,14 +43,14 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
     </tr>
     <tr>
       <td>Desktop Apple Silicon</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-macos-arm64.zip">Gearsystem-3.9.18-desktop-macos-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-macos-arm64.zip">Gearsystem-3.9.26-desktop-macos-arm64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Intel</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-macos-intel.zip">Gearsystem-3.9.18-desktop-macos-intel.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-macos-intel.zip">Gearsystem-3.9.26-desktop-macos-intel.zip</a></td>
     </tr>
     <tr>
-      <td rowspan="5"><strong>Linux</strong></td>
+      <td rowspan="6"><strong>Linux</strong></td>
       <td>Ubuntu PPA</td>
       <td><a href="https://github.com/drhelius/ppa-geardome">drhelius/ppa-geardome</a></td>
     </tr>
@@ -59,16 +59,20 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
       <td><a href="https://github.com/drhelius/rpm-geardome">drhelius/rpm-geardome</a></td>
     </tr>
     <tr>
-      <td>Desktop Ubuntu 24.04 x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-ubuntu24.04-x64.zip">Gearsystem-3.9.18-desktop-ubuntu24.04-x64.zip</a></td>
+      <td>Desktop Ubuntu 26.04 x64</td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-ubuntu26.04-x64.zip">Gearsystem-3.9.26-desktop-ubuntu26.04-x64.zip</a></td>
     </tr>
     <tr>
-      <td>Desktop Ubuntu 22.04 x64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-ubuntu22.04-x64.zip">Gearsystem-3.9.18-desktop-ubuntu22.04-x64.zip</a></td>
+      <td>Desktop Ubuntu 26.04 ARM64</td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-ubuntu26.04-arm64.zip">Gearsystem-3.9.26-desktop-ubuntu26.04-arm64.zip</a></td>
+    </tr>
+    <tr>
+      <td>Desktop Ubuntu 24.04 x64</td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-ubuntu24.04-x64.zip">Gearsystem-3.9.26-desktop-ubuntu24.04-x64.zip</a></td>
     </tr>
     <tr>
       <td>Desktop Ubuntu 24.04 ARM64</td>
-      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.18/Gearsystem-3.9.18-desktop-ubuntu24.04-arm64.zip">Gearsystem-3.9.18-desktop-ubuntu24.04-arm64.zip</a></td>
+      <td><a href="https://github.com/drhelius/Gearsystem/releases/download/3.9.26/Gearsystem-3.9.26-desktop-ubuntu24.04-arm64.zip">Gearsystem-3.9.26-desktop-ubuntu24.04-arm64.zip</a></td>
     </tr>
     <tr>
       <td><strong>MCPB</strong></td>
@@ -107,19 +111,20 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - Supported cartridges: ROM, ROM + RAM, SEGA, Codemasters, Korean, MSX + Nemesis, Janggun, SG-1000, and many Korean multi-carts.
 - Automatic region detection: NTSC-JAP, NTSC-USA, PAL-EUR.
 - Support for YM2413 (OPLL) FM sound chip.
-- Game Gear Gear-to-Gear cable support for two local desktop processes, including serial and parallel communication.
+- Gear-to-Gear cable support for two local desktop processes, including serial and parallel communication.
+- Mark III Joy-Joy cable support for two local desktop processes.
 - Light Phaser and Paddle Control support.
 - Internal database for ROM detection.
 - Battery powered RAM save support.
 - Save states with preview and rewind support.
 - Run-ahead support to reduce input latency.
 - Compressed ROM support (ZIP).
-- *Game Genie* and *Pro Action Replay* cheat support.
+- *Game Genie* and *Pro Action Replay* cheat support, with RetroArch `.cht` import.
 - VGM recorder.
 - Supported platforms (standalone): Windows, Linux, BSD and macOS.
 - Supported platforms (libretro): Windows, Linux, macOS, Raspberry Pi, Android, iOS, tvOS, webOS, PlayStation Vita, PlayStation 3, Nintendo 3DS, Nintendo GameCube, Nintendo Wii, Nintendo WiiU, Nintendo Switch, Emscripten, Classic Mini systems (NES, SNES, C64, ...), OpenDingux, RetroFW and QNX.
 - Full debugger with just-in-time disassembler, CPU breakpoints, memory access breakpoints, code navigation (goto address, JP JR and CALL double clicking), debug symbols, automatic labels, memory editor, trace logger, IO inspector and VRAM viewer including tiles, sprites, backgrounds and palettes.
-- MCP server for AI-assisted debugging with GitHub Copilot, Claude, Codex and similar, exposing tools for execution control, memory inspection, hardware status, rewind and more.
+- MCP server for AI-assisted debugging with Claude Code, Codex and similar, exposing tools for execution control, memory inspection, hardware status, rewind and more.
 - Windows, Linux and macOS *Portable Mode*.
 - [Programmable Shader Chain](platforms/shared/desktop/shaders/README.md).
 - ROM loading from the command line by adding the ROM path as an argument.
@@ -133,8 +138,8 @@ Don't hesitate to report bugs or ask for new features by [opening an issue](http
 - **Overscan**: For a precise representation of the original image, select **Overscan** `Top+Bottom` and **Aspect Ratio** `Standard (4:3 DAR)` in the **Video** menu. Game Gear will ignore any overscan settings.
 - **Mouse Cursor**: Automatically hides when hovering over the main output window or when Main Menu is disabled.
 - **Portable Mode**: Run with `--portable`, or create an empty file named `portable.ini` in the same directory as the application binary. On macOS, place the file next to the `.app` bundle.
-- **Gear-to-Gear**:
-Open `Gear-to-Gear` in two desktop instances, select the same session, and connect both, or start each process with `--geartogear-session N`. Independent instances should use separate application copies or `--portable` data directories so configuration, saves, and single-instance handling do not conflict.
+- **Gear-to-Gear and Mark III Link Cable**:
+Open `Link Cable` in two desktop instances, select the same session, and connect both, or start each process with `--link-session N`. Select `Auto`, `Gear-to-Gear`, or `Mark III` under `Protocol`; the session is independent of this selection. `Auto` uses Gear-to-Gear for native Game Gear software and Mark III Joy-Joy for F-16 Fighting Falcon (Japan). For Mark III, Return, 1, 2, and Space are mapped to the SK-1100 keyboard. Reset the console if Mark III hardware is attached after startup. Independent instances should use separate application copies or `--portable` data directories so configuration, saves, and single-instance handling do not conflict.
 
 ### Debugging Features
 - **Docking Windows**: In debug mode, you can dock windows together by pressing SHIFT and dragging a window onto another.
@@ -153,14 +158,15 @@ Arguments:
 Options:
   -f, --fullscreen            Start in fullscreen mode
   -w, --windowed              Start in windowed mode with menu visible
+      --load-state SLOT       Load save state slot 1-5, or a state file, once the media is loaded
       --mcp-stdio             Auto-start MCP server with stdio transport
       --mcp-http              Auto-start MCP server with HTTP transport
       --mcp-router            Enable compact MCP tool routing
       --mcp-http-address A    HTTP bind address (default: 127.0.0.1)
       --mcp-http-port N       HTTP port for MCP server (default: 7777)
-      --headless              Run without GUI (requires MCP or Gear-to-Gear)
-      --geartogear-session N  Connect to Gear-to-Gear session 1-255
-      --geartogear-stall-us N Override barrier stall threshold (0=default)
+      --headless              Run without GUI (requires MCP or Link Cable)
+      --link-session N        Connect to link cable session 1-255
+      --link-stall-us N       Override barrier stall threshold (0=default)
       --portable              Store configuration and user data beside the application
   -v, --version               Display version information
   -h, --help                  Display this help message
@@ -168,7 +174,7 @@ Options:
 
 ### MCP Server
 
-Gearsystem includes a [Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) server that enables AI-assisted debugging through AI agents like GitHub Copilot, Claude, Codex and similar. The server provides tools for execution control, memory inspection, breakpoints, disassembly, hardware status, and more. STDIO and HTTP transports are supported, with STDIO preferred.
+Gearsystem includes a [Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) server that enables AI-assisted debugging through AI agents like Claude Code, Codex and similar. The server provides tools for execution control, memory inspection, breakpoints, disassembly, hardware status, and more. STDIO and HTTP transports are supported, with STDIO preferred.
 
 For complete setup instructions and tool documentation, see [MCP_README.md](MCP_README.md).
 
@@ -206,15 +212,15 @@ make dist
 
 - Ubuntu / Debian / Raspberry Pi (Raspbian):
 
-If you are using Ubuntu 25.04 or later, you can install SDL3 directly. Use the following commands to build:
+If you are using Ubuntu 26.04, you can install SDL3 directly. Use the following commands to build:
 
 ``` shell
-sudo apt install build-essential libsdl3-dev
+sudo apt install build-essential pkg-config libsdl3-dev libgl-dev
 cd platforms/linux
 make
 ```
 
-For older Ubuntu versions (22.04, 24.04), you need to build SDL3 from source first. Use the following commands to build both SDL3 and Gearsystem:
+For Ubuntu 24.04, you need to build SDL3 from source first. Use the following commands to build both SDL3 and Gearsystem:
 
 ``` shell
 sudo apt install build-essential cmake git curl jq pkg-config \

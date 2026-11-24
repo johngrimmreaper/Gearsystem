@@ -26,6 +26,7 @@
     #define EXTERN extern
 #endif
 
+EXTERN void gui_action_load_defaults(void);
 EXTERN void gui_action_reset(void);
 EXTERN void gui_action_reload_rom(void);
 EXTERN void gui_action_pause(void);
@@ -33,10 +34,16 @@ EXTERN void gui_action_ffwd(void);
 EXTERN void gui_action_rewind_pressed(void);
 EXTERN void gui_action_rewind_released(void);
 EXTERN void gui_action_save_screenshot(const char* path);
+EXTERN bool gui_action_start_video_recording(const char* path);
+EXTERN void gui_action_stop_video_recording(void);
+EXTERN void gui_action_toggle_video_recording(void);
 EXTERN void gui_action_save_sprite(const char* path, int index);
 EXTERN void gui_action_save_all_sprites(const char* folder_path);
 EXTERN void gui_action_save_background(const char* path);
 EXTERN void gui_action_save_tiles(const char* path);
+EXTERN void gui_action_save_state(const char* path);
+EXTERN void gui_action_load_state(const char* path);
+EXTERN void gui_action_load_state_slot(int slot);
 
 #undef GUI_ACTIONS_IMPORT
 #undef EXTERN

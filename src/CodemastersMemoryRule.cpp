@@ -85,7 +85,7 @@ void CodemastersMemoryRule::PerformWrite(u16 address, u8 value)
                 m_bRAMBankActive = ((value & 0x80) != 0) && m_pCartridge->HasRAMWithoutBattery();
                 m_iMapperSlot[1] = value & (m_pCartridge->GetROMBankCount() - 1);
                 m_iMapperSlotAddress[1] = m_iMapperSlot[1] * 0x4000;
-                TraceMapperEvent(TRACE_MAPPER_CONTROL, address, value, m_bRAMBankActive ? 1 : 0, m_iMapperSlot[1], true);
+                TraceMapperEvent(TRACE_MAPPER_CONTROL, address, value, m_bRAMBankActive ? 1 : 0, m_iMapperSlot[1]);
                 break;
             }
             case 0x8000:
@@ -145,6 +145,16 @@ void CodemastersMemoryRule::Reset()
 u8* CodemastersMemoryRule::GetRamBanks()
 {
     return m_bRAMBankActive ? m_pCartRAM : NULL;
+}
+
+size_t CodemastersMemoryRule::GetCartRamSize()
+{
+    return m_pCartridge->HasRAMWithoutBattery() ? 0x2000 : 0;
+}
+
+u8* CodemastersMemoryRule::GetCartRam()
+{
+    return m_pCartRAM;
 }
 
 u8* CodemastersMemoryRule::GetPage(int index)

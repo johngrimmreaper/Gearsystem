@@ -61,6 +61,10 @@ inline void Processor::LeaveHalt()
     {
         m_bHalt = false;
         PC.Increment();
+#if !defined(GS_DISABLE_DISASSEMBLER)
+        if (unlikely(m_pProfiler->IsEnabled()))
+            m_pProfiler->Halt(false, m_iTStates);
+#endif
     }
 }
 
@@ -317,7 +321,7 @@ inline void Processor::OPCodes_RST(u16 address)
     PC.SetValue(address);
     WZ.SetValue(address);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-    PushCallStack(pc - 1, address, pc, m_pMemory->GetBank(address));
+    PushCallStack(pc - 1, address, pc, m_pMemory->GetBank(address), 11, false);
 #endif
 }
 
@@ -331,7 +335,7 @@ inline void Processor::OPCodes_CALL_nn()
     PC.SetValue(address);
     WZ.SetValue(address);
 #if !defined(GS_DISABLE_DISASSEMBLER)
-    PushCallStack(pc - 3, address, pc, m_pMemory->GetBank(address));
+    PushCallStack(pc - 3, address, pc, m_pMemory->GetBank(address), 17, false);
 #endif
 }
 
@@ -347,7 +351,7 @@ inline void Processor::OPCodes_CALL_nn_Conditional(bool condition)
         PC.SetValue(address);
         m_bBranchTaken = true;
 #if !defined(GS_DISABLE_DISASSEMBLER)
-        PushCallStack(pc - 3, address, pc, m_pMemory->GetBank(address));
+        PushCallStack(pc - 3, address, pc, m_pMemory->GetBank(address), 17, false);
 #endif
     }
     WZ.SetValue(address);
@@ -402,12 +406,14 @@ inline void Processor::OPCodes_JR_n_conditional(bool condition)
     }
 }
 
-inline void Processor::OPCodes_RET()
+inline void Processor::OPCodes_RET(u8 tstates)
 {
     StackPop(&PC);
     WZ.SetValue(PC.GetValue());
 #if !defined(GS_DISABLE_DISASSEMBLER)
-    PopCallStack();
+    PopCallStack(tstates);
+#else
+    UNUSED(tstates);
 #endif
 }
 
@@ -415,7 +421,7 @@ inline void Processor::OPCodes_RET_Conditional(bool condition)
 {
     if (condition)
     {
-        OPCodes_RET();
+        OPCodes_RET(11);
         m_bBranchTaken = true;
     }
 }
@@ -626,7 +632,7 @@ inline void Processor::OPCodes_AND(u8 number)
 inline void Processor::OPCodes_CP(u8 number)
 {
     int result = AF.GetHigh() - number;
-    int carrybits = AF.GetHigh() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(AF.GetHigh() ^ number ^ result);
     u8 final_result = static_cast<u8> (result);
     SetFlag(FLAG_NEGATIVE);
     ToggleZeroFlagFromResult(final_result);
@@ -644,7 +650,7 @@ inline void Processor::OPCodes_CPI()
 {
     u8 number = m_pMemory->Read(HL.GetValue());
     int result = AF.GetHigh() - number;
-    int carrybits = AF.GetHigh() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(AF.GetHigh() ^ number ^ result);
     u8 final_result = static_cast<u8> (result);
     ToggleFlag(FLAG_NEGATIVE);
     ToggleZeroFlagFromResult(final_result);
@@ -675,7 +681,7 @@ inline void Processor::OPCodes_CPD()
 {
     u8 number = m_pMemory->Read(HL.GetValue());
     int result = AF.GetHigh() - number;
-    int carrybits = AF.GetHigh() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(AF.GetHigh() ^ number ^ result);
     u8 final_result = static_cast<u8> (result);
     ToggleFlag(FLAG_NEGATIVE);
     ToggleZeroFlagFromResult(final_result);
@@ -765,7 +771,7 @@ inline void Processor::OPCodes_DEC_HL()
 inline void Processor::OPCodes_ADD(u8 number)
 {
     int result = AF.GetHigh() + number;
-    int carrybits = AF.GetHigh() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(AF.GetHigh() ^ number ^ result);
     u8 final_result = static_cast<u8> (result);
     AF.SetHigh(final_result);
     ClearAllFlags();
@@ -783,7 +789,7 @@ inline void Processor::OPCodes_ADD(u8 number)
 inline void Processor::OPCodes_ADC(u8 number)
 {
     int result = AF.GetHigh() + number + (IsSetFlag(FLAG_CARRY) ? 1 : 0);
-    int carrybits = AF.GetHigh() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(AF.GetHigh() ^ number ^ result);
     u8 final_result = static_cast<u8> (result);
     AF.SetHigh(final_result);
     ClearAllFlags();
@@ -801,7 +807,7 @@ inline void Processor::OPCodes_ADC(u8 number)
 inline void Processor::OPCodes_SUB(u8 number)
 {
     int result = AF.GetHigh() - number;
-    int carrybits = AF.GetHigh() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(AF.GetHigh() ^ number ^ result);
     u8 final_result = static_cast<u8> (result);
     AF.SetHigh(final_result);
     SetFlag(FLAG_NEGATIVE);
@@ -819,7 +825,7 @@ inline void Processor::OPCodes_SUB(u8 number)
 inline void Processor::OPCodes_SBC(u8 number)
 {
     int result = AF.GetHigh() - number - (IsSetFlag(FLAG_CARRY) ? 1 : 0);
-    int carrybits = AF.GetHigh() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(AF.GetHigh() ^ number ^ result);
     u8 final_result = static_cast<u8> (result);
     AF.SetHigh(final_result);
     SetFlag(FLAG_NEGATIVE);
@@ -839,7 +845,7 @@ inline void Processor::OPCodes_ADD_HL(u16 number)
     SixteenBitRegister* reg = GetPrefixedRegister();
     WZ.SetValue(reg->GetValue() + 1);
     int result = reg->GetValue() + number;
-    int carrybits = reg->GetValue() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(reg->GetValue() ^ number ^ result);
     reg->SetValue(static_cast<u16> (result));
     ClearFlag(FLAG_NEGATIVE);
     ToggleXYFlagsFromResult(reg->GetHigh());
@@ -857,7 +863,7 @@ inline void Processor::OPCodes_ADC_HL(u16 number)
 {
     WZ.SetValue(HL.GetValue() + 1);
     int result = HL.GetValue() + number + (IsSetFlag(FLAG_CARRY) ? 1 : 0);
-    int carrybits = HL.GetValue() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(HL.GetValue() ^ number ^ result);
     u16 final_result = static_cast<u16> (result);
     HL.SetValue(final_result);
     ClearAllFlags();
@@ -876,7 +882,7 @@ inline void Processor::OPCodes_SBC_HL(u16 number)
 {
     WZ.SetValue(HL.GetValue() + 1);
     int result = HL.GetValue() - number - (IsSetFlag(FLAG_CARRY) ? 1 : 0);
-    int carrybits = HL.GetValue() ^ number ^ result;
+    u32 carrybits = static_cast<u32>(HL.GetValue() ^ number ^ result);
     u16 final_result = static_cast<u16> (result);
     HL.SetValue(final_result);
     SetFlag(FLAG_NEGATIVE);
@@ -1320,12 +1326,36 @@ inline std::vector<Processor::GS_Breakpoint>* Processor::GetBreakpoints()
     return &m_breakpoints;
 }
 
+INLINE bool Processor::HasMemoryHooks(bool read) const
+{
+    return read ? m_memory_hooks_read : m_memory_hooks_write;
+}
+
+INLINE void Processor::CheckCpuAddressHooks(u16 address, bool read)
+{
+    if ((read ? m_vblank_watch_read : m_vblank_watch_write) && (address == m_vblank_watch_address))
+        m_vblank_watch_hit = true;
+
+    if (m_breakpoints_enabled)
+        CheckMemoryBreakpoints(GS_BREAKPOINT_TYPE_ROMRAM, address, read);
+}
+
+INLINE u16 Processor::GetVBlankWatchAddress() const
+{
+    return m_vblank_watch_address;
+}
+
+INLINE bool Processor::GetVBlankWatchAccess(bool read) const
+{
+    return read ? m_vblank_watch_read : m_vblank_watch_write;
+}
+
 inline std::stack<Processor::GS_CallStackEntry>* Processor::GetDisassemblerCallStack()
 {
     return &m_disassembler_call_stack;
 }
 
-inline void Processor::PushCallStack(u16 src, u16 dest, u16 back, u16 bank)
+inline void Processor::PushCallStack(u16 src, u16 dest, u16 back, u16 bank, u8 tstates, bool irq)
 {
 #if !defined(GS_DISABLE_DISASSEMBLER)
     GS_CallStackEntry entry;
@@ -1335,19 +1365,29 @@ inline void Processor::PushCallStack(u16 src, u16 dest, u16 back, u16 bank)
     entry.bank = bank;
     if (m_disassembler_call_stack.size() < 256)
         m_disassembler_call_stack.push(entry);
+
+    if (unlikely(m_pProfiler->IsEnabled()))
+        ProfilerEnter(dest, m_iTStates + tstates, irq);
 #else
     UNUSED(src);
     UNUSED(dest);
     UNUSED(back);
     UNUSED(bank);
+    UNUSED(tstates);
+    UNUSED(irq);
 #endif
 }
 
-inline void Processor::PopCallStack()
+inline void Processor::PopCallStack(u8 tstates)
 {
 #if !defined(GS_DISABLE_DISASSEMBLER)
     if (!m_disassembler_call_stack.empty())
         m_disassembler_call_stack.pop();
+
+    if (unlikely(m_pProfiler->IsEnabled()))
+        m_pProfiler->Return((u16)(SP.GetValue() - 2), m_iTStates + tstates);
+#else
+    UNUSED(tstates);
 #endif
 }
 

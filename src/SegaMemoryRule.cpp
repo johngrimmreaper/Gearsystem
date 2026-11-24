@@ -113,7 +113,7 @@ void SegaMemoryRule::PerformWrite(u16 address, u8 value)
                 m_bRAMEnabled = IsSetBit(value, 3);
                 if (m_bRAMEnabled && !m_pCartridge->HasRAMWithoutBattery())
                     m_iPersistRAM = 1;
-                TraceMapperEvent(TRACE_MAPPER_RAM, address, value, m_bRAMEnabled ? 1 : 0, (u16)(m_RAMBankStartAddress >> 14), true);
+                TraceMapperEvent(TRACE_MAPPER_RAM, address, value, m_bRAMEnabled ? 1 : 0, (u16)(m_RAMBankStartAddress >> 14));
                 break;
             }
             case 0xFFFD:
@@ -223,6 +223,16 @@ u8* SegaMemoryRule::GetRamBanks()
         return NULL;
     else
         return m_pRAMBanks;
+}
+
+size_t SegaMemoryRule::GetCartRamSize()
+{
+    return 0x8000;
+}
+
+u8* SegaMemoryRule::GetCartRam()
+{
+    return m_pRAMBanks;
 }
 
 int SegaMemoryRule::GetRamBank()

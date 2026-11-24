@@ -28,10 +28,12 @@
 #include "gui_debug_processor.h"
 #include "gui_debug_psg.h"
 #include "gui_debug_ym2413.h"
-#include "gui_debug_geartogear.h"
+#include "gui_debug_link_cable.h"
+#include "gui_debug_markiii_link.h"
 #include "gui_debug_rewind.h"
 #include "gui_debug_video.h"
 #include "gui_debug_trace_logger.h"
+#include "gui_debug_profiler.h"
 #include "emu.h"
 #include "config.h"
 
@@ -49,7 +51,6 @@ void gui_debug_init(void)
     gui_debug_trace_logger_init();
     gui_debug_disassembler_init();
     gui_debug_psg_init();
-    gui_debug_ym2413_init();
     gui_debug_memory_init();
 }
 
@@ -63,9 +64,10 @@ void gui_debug_destroy(void)
 
 void gui_debug_reset(void)
 {
-    gui_debug_trace_logger_reset();
+    gui_debug_trace_logger_reset("media_change");
     gui_debug_disassembler_reset();
     gui_debug_memory_reset();
+    gui_debug_profiler_reset();
     gui_debug_reset_breakpoints();
     gui_debug_reset_symbols();
 }
@@ -79,6 +81,7 @@ void gui_debug_windows(void)
 {
     gui_debug_update();
     emu_get_core()->GetAudio()->EnablePSGDebug(config_debug.debug && config_debug.show_psg);
+    gui_debug_profiler_update();
 
     if (config_debug.debug)
     {
@@ -94,6 +97,8 @@ void gui_debug_windows(void)
             gui_debug_window_breakpoints();
         if (config_debug.show_symbols)
             gui_debug_window_symbols();
+        if (config_debug.show_profiler)
+            gui_debug_window_profiler();
         if (config_debug.show_psg)
             gui_debug_window_psg();
         if (config_debug.show_ym2413)
@@ -102,8 +107,10 @@ void gui_debug_windows(void)
             gui_debug_window_geartogear_serial_registers();
         if (config_debug.show_geartogear_serial_status)
             gui_debug_window_geartogear_serial_status();
-        if (config_debug.show_geartogear_transport)
-            gui_debug_window_geartogear_transport();
+        if (config_debug.show_markiii_link)
+            gui_debug_window_markiii_link();
+        if (config_debug.show_link_cable_transport)
+            gui_debug_window_link_cable_transport();
         if (config_debug.show_rewind)
             gui_debug_window_rewind();
         if (config_debug.show_video_nametable)
@@ -125,13 +132,13 @@ void gui_debug_windows(void)
     }
 }
 
-void gui_debug_save_settings(const char* file_path)
+bool gui_debug_save_settings(const char* file_path)
 {
     std::ofstream file(file_path, std::ios::binary);
     if (!file.is_open())
     {
         Log("Failed to open debug settings file for writing: %s", file_path);
-        return;
+        return false;
     }
 
     file.write(GSDEBUG_MAGIC, GSDEBUG_MAGIC_LEN);
@@ -176,15 +183,16 @@ void gui_debug_save_settings(const char* file_path)
     file.close();
 
     Log("Debug settings saved to: %s", file_path);
+    return true;
 }
 
-void gui_debug_load_settings(const char* file_path)
+bool gui_debug_load_settings(const char* file_path)
 {
     std::ifstream file(file_path, std::ios::binary);
     if (!file.is_open())
     {
         Log("Failed to open debug settings file for reading: %s", file_path);
-        return;
+        return false;
     }
 
     char magic[8] = {};
@@ -192,7 +200,7 @@ void gui_debug_load_settings(const char* file_path)
         memcmp(magic, GSDEBUG_MAGIC, GSDEBUG_MAGIC_LEN) != 0)
     {
         Log("Invalid debug settings file: %s", file_path);
-        return;
+        return false;
     }
 
     GearsystemCore* core = emu_get_core();
@@ -206,7 +214,7 @@ void gui_debug_load_settings(const char* file_path)
     if (!read_settings_count(file, bp_count, breakpoint_size))
     {
         Log("Invalid debug settings file: %s", file_path);
-        return;
+        return false;
     }
 
     std::vector<Processor::GS_Breakpoint> breakpoints;
@@ -224,7 +232,7 @@ void gui_debug_load_settings(const char* file_path)
             !read_settings_bool(file, bp.range))
         {
             Log("Invalid debug settings file: %s", file_path);
-            return;
+            return false;
         }
         breakpoints.push_back(bp);
     }
@@ -233,7 +241,7 @@ void gui_debug_load_settings(const char* file_path)
     if (!read_settings_bool(file, irq_breakpoints))
     {
         Log("Invalid debug settings file: %s", file_path);
-        return;
+        return false;
     }
 
     struct DasmBookmark { u16 address; char name[32]; };
@@ -243,7 +251,7 @@ void gui_debug_load_settings(const char* file_path)
     if (!read_settings_count(file, bookmark_count, bookmark_size))
     {
         Log("Invalid debug settings file: %s", file_path);
-        return;
+        return false;
     }
 
     std::vector<DasmBookmark> bookmarks;
@@ -255,7 +263,7 @@ void gui_debug_load_settings(const char* file_path)
             !read_settings_data(file, item.name, sizeof(item.name)))
         {
             Log("Invalid debug settings file: %s", file_path);
-            return;
+            return false;
         }
         item.name[sizeof(item.name) - 1] = 0;
         bookmarks.push_back(item);
@@ -264,7 +272,7 @@ void gui_debug_load_settings(const char* file_path)
     if (!gui_debug_memory_load_settings(file))
     {
         Log("Invalid debug settings file: %s", file_path);
-        return;
+        return false;
     }
 
     processor->GetBreakpoints()->swap(breakpoints);
@@ -277,6 +285,7 @@ void gui_debug_load_settings(const char* file_path)
     file.close();
 
     Log("Debug settings loaded from: %s", file_path);
+    return true;
 }
 
 static std::string get_auto_debug_settings_path(void)

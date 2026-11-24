@@ -24,16 +24,21 @@
 #include "../emu.h"
 #include "../gui.h"
 #include "../gui_actions.h"
+#include "../gui_cheats.h"
 #include "../gui_debug_disassembler.h"
 #include "../gui_debug_memory.h"
 #include "../gui_debug_memeditor.h"
 #include "../gui_debug_rewind.h"
 #include "../gui_debug_trace_logger.h"
+#include "../gui_debug_profiler.h"
 #include "../trace_logger_formatter.h"
 #include "../config.h"
 #include "../events.h"
 #include "../rewind.h"
+#include "../video_recorder.h"
 #include <cstring>
+#include <cctype>
+#include <cmath>
 #include <sstream>
 #include <iomanip>
 #include <vector>
@@ -253,40 +258,6 @@ std::vector<BreakpointInfo> DebugAdapter::ListBreakpoints()
     }
 
     return result;
-}
-
-RegistersSnapshot DebugAdapter::GetRegisters()
-{
-    Debug("[MCP] GetRegisters: start");
-
-    Processor* cpu = m_core->GetProcessor();
-    Processor::ProcessorState* state = cpu->GetState();
-
-    Debug("[MCP] GetRegisters: creating snapshot");
-    RegistersSnapshot snapshot;
-
-    snapshot.AF = state->AF->GetValue();
-    snapshot.BC = state->BC->GetValue();
-    snapshot.DE = state->DE->GetValue();
-    snapshot.HL = state->HL->GetValue();
-    snapshot.AF2 = state->AF2->GetValue();
-    snapshot.BC2 = state->BC2->GetValue();
-    snapshot.DE2 = state->DE2->GetValue();
-    snapshot.HL2 = state->HL2->GetValue();
-    snapshot.IX = state->IX->GetValue();
-    snapshot.IY = state->IY->GetValue();
-    snapshot.SP = state->SP->GetValue();
-    snapshot.PC = state->PC->GetValue();
-    snapshot.WZ = state->WZ->GetValue();
-    snapshot.I = *state->I;
-    snapshot.R = *state->R;
-    snapshot.IFF1 = *state->IFF1;
-    snapshot.IFF2 = *state->IFF2;
-    snapshot.Halt = *state->Halt;
-    snapshot.InterruptMode = *state->InterruptMode;
-
-    Debug("[MCP] GetRegisters: done (PC=%04X)", snapshot.PC);
-    return snapshot;
 }
 
 void DebugAdapter::SetRegister(const std::string& name, u32 value)
@@ -1176,8 +1147,27 @@ json DebugAdapter::GetSerialStatus()
         "idle", "confirm_start", "data", "stop"
     };
 
-    GearToGearStatus link = emu_geartogear_get_status();
+    LinkCableStatus link = emu_link_cable_get_status();
     GS_GearToGear_DebugState hardware = emu_geartogear_get_debug_state();
+    GS_MarkIII_LinkDebugState markiii = emu_markiii_link_get_debug_state();
+
+    const char* protocol = "none";
+    if (link.protocol == LinkCableProtocolGearToGear)
+        protocol = "game_gear_geartogear";
+    else if (link.protocol == LinkCableProtocolMarkIII)
+        protocol = "markiii_joyjoy";
+
+    const char* remote_protocol = "none";
+    if (link.remote_protocol == LinkCableProtocolGearToGear)
+        remote_protocol = "game_gear_geartogear";
+    else if (link.remote_protocol == LinkCableProtocolMarkIII)
+        remote_protocol = "markiii_joyjoy";
+
+    const char* selected_protocol = "none";
+    if (m_core->GetLinkCableProtocol() == LinkCableProtocolGearToGear)
+        selected_protocol = "game_gear_geartogear";
+    else if (m_core->GetLinkCableProtocol() == LinkCableProtocolMarkIII)
+        selected_protocol = "markiii_joyjoy";
 
     json status;
     std::ostringstream ss;
@@ -1198,6 +1188,7 @@ json DebugAdapter::GetSerialStatus()
     registers["SSTATUS"] = ss.str(); ss.str("");
     status["registers"] = registers;
     status["native_game_gear"] = m_core->IsNativeGameGearMode();
+    status["link_protocol"] = selected_protocol;
 
     u8 baud_index = (hardware.serial_control >> 6) & 0x03;
     json control;
@@ -1263,12 +1254,38 @@ json DebugAdapter::GetSerialStatus()
     wire["contention_mask"] = ss.str(); ss.str("");
     status["wire"] = wire;
     status["io_cycle"] = hardware.cycle;
-    status["link_cycle"] = m_core->GetGearToGearCycles();
+    status["link_cycle"] = m_core->GetLinkCableCycles();
+
+    json markiii_status;
+    markiii_status["peripheral_attached"] = markiii.peripheral_attached;
+    markiii_status["transport_active"] = markiii.transport_active;
+    markiii_status["cable_connected"] = markiii.cable_connected;
+    ss << std::setw(2) << (int)markiii.control;
+    markiii_status["control"] = ss.str(); ss.str("");
+    ss << std::setw(2) << (int)markiii.port_a;
+    markiii_status["port_a"] = ss.str(); ss.str("");
+    ss << std::setw(2) << (int)markiii.port_b;
+    markiii_status["port_b"] = ss.str(); ss.str("");
+    ss << std::setw(2) << (int)markiii.port_c;
+    markiii_status["port_c"] = ss.str(); ss.str("");
+    ss << std::setw(2) << (int)markiii.port_c_latch;
+    markiii_status["port_c_latch"] = ss.str(); ss.str("");
+    markiii_status["selected_row"] = markiii.selected_row;
+    ss << std::setw(2) << (int)markiii.local_state.drive_mask;
+    markiii_status["local_drive_mask"] = ss.str(); ss.str("");
+    ss << std::setw(2) << (int)markiii.local_state.levels;
+    markiii_status["local_levels"] = ss.str(); ss.str("");
+    ss << std::setw(2) << (int)markiii.remote_state.drive_mask;
+    markiii_status["remote_drive_mask"] = ss.str(); ss.str("");
+    ss << std::setw(2) << (int)markiii.remote_state.levels;
+    markiii_status["remote_levels"] = ss.str(); ss.str("");
+    markiii_status["cycle"] = markiii.cycle;
+    status["markiii"] = markiii_status;
 
     const char* mode = "disabled";
-    if (link.mode == GearToGearModeConnected)
+    if (link.mode == LinkCableModeConnected)
         mode = "connected";
-    else if (link.mode == GearToGearModeFault)
+    else if (link.mode == LinkCableModeFault)
         mode = "fault";
 
     json transport;
@@ -1282,10 +1299,12 @@ json DebugAdapter::GetSerialStatus()
     transport["pacing_mode"] = !link.cable_connected ? "local" : (link.pacing_peer ? "leader" : "follower");
     transport["local_hardware_ready"] = link.local_hardware_ready;
     transport["remote_hardware_ready"] = link.remote_hardware_ready;
+    transport["protocol"] = protocol;
+    transport["remote_protocol"] = remote_protocol;
     transport["local_anchor"] = link.local_anchor;
     transport["bus_anchor"] = link.bus_anchor;
     transport["bus_cycle"] = link.bus_cycle;
-    transport["max_lead_cycles"] = GEARTOGEAR_MAX_LEAD_CYCLES;
+    transport["max_lead_cycles"] = LINK_CABLE_MAX_LEAD_CYCLES;
     transport["local_progress"] = link.local_progress;
     transport["local_promise"] = link.local_promise;
     transport["remote_progress"] = link.remote_progress;
@@ -1316,14 +1335,14 @@ json DebugAdapter::GetSerialStatus()
     transport["seqlock_retries"] = link.seqlock_retries;
     transport["attachments"] = link.attachments;
     transport["last_error"] = link.last_error;
-    status["geartogear"] = transport;
+    status["link_cable"] = transport;
 
     return status;
 }
 
-json DebugAdapter::ResetGearToGearMetrics()
+json DebugAdapter::ResetLinkCableMetrics()
 {
-    emu_geartogear_reset_metrics();
+    emu_link_cable_reset_metrics();
     return {{"success", true}};
 }
 
@@ -1357,6 +1376,96 @@ json DebugAdapter::GetScreenshot()
     result["mimeType"] = "image/png";
     result["width"] = runtime.screen_width;
     result["height"] = runtime.screen_height;
+
+    return result;
+}
+
+static const char* const k_video_recording_ratios[] = { "screen", "square", "4:3", "16:9", "16:10" };
+static const char* const k_video_recording_qualities[] = { "low", "medium", "high", "lossless", "lossless_compressed" };
+static const int k_video_recording_ratio_count = sizeof(k_video_recording_ratios) / sizeof(k_video_recording_ratios[0]);
+static const int k_video_recording_quality_count = sizeof(k_video_recording_qualities) / sizeof(k_video_recording_qualities[0]);
+
+static int find_video_recording_option(const std::string& value, const char* const* options, int count)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if (value == options[i])
+            return i;
+    }
+    return -1;
+}
+
+json DebugAdapter::StartVideoRecording(const std::string& file_path, int scale, const std::string& aspect_ratio, const std::string& quality)
+{
+    json result;
+
+    if (!m_core || !m_core->GetCartridge()->IsReady())
+    {
+        result["error"] = "No media loaded";
+        Log("[MCP] StartVideoRecording failed: No media loaded");
+        return result;
+    }
+
+    if (emu_is_video_recording())
+    {
+        result["error"] = "Video recording is already active";
+        return result;
+    }
+
+    int ratio = aspect_ratio.empty() ? config_video.recording_ratio : find_video_recording_option(aspect_ratio, k_video_recording_ratios, k_video_recording_ratio_count);
+    int quality_index = quality.empty() ? config_video.recording_quality : find_video_recording_option(quality, k_video_recording_qualities, k_video_recording_quality_count);
+
+    if ((scale != 0) && ((scale < 1) || (scale > 20)))
+    {
+        result["error"] = "Invalid scale";
+        return result;
+    }
+
+    if ((ratio < 0) || (quality_index < 0))
+    {
+        result["error"] = "Invalid aspect ratio or quality";
+        return result;
+    }
+
+    if (scale != 0)
+        config_video.recording_scale = scale;
+    config_video.recording_ratio = ratio;
+    config_video.recording_quality = quality_index;
+
+    if (!gui_action_start_video_recording(file_path.empty() ? NULL : file_path.c_str()))
+    {
+        result["error"] = "Failed to start video recording";
+        Log("[MCP] StartVideoRecording failed: %s", file_path.c_str());
+        return result;
+    }
+
+    result["success"] = true;
+    result["file_path"] = video_recorder_get_file_path();
+    result["scale"] = config_video.recording_scale;
+    result["aspect_ratio"] = k_video_recording_ratios[config_video.recording_ratio];
+    result["quality"] = k_video_recording_qualities[config_video.recording_quality];
+
+    return result;
+}
+
+json DebugAdapter::StopVideoRecording()
+{
+    json result;
+
+    if (!emu_is_video_recording())
+    {
+        result["error"] = "Video recording is not active";
+        return result;
+    }
+
+    std::string file_path = video_recorder_get_file_path();
+    u32 frames = video_recorder_get_frame_count();
+
+    gui_action_stop_video_recording();
+
+    result["success"] = true;
+    result["file_path"] = file_path;
+    result["frames"] = frames;
 
     return result;
 }
@@ -1596,7 +1705,7 @@ json DebugAdapter::LoadStateFile(const std::string& file_path)
         return result;
     }
 
-    emu_geartogear_stop();
+    emu_link_cable_stop();
     if (!m_core->LoadState(file_path.c_str()))
     {
         result["error"] = "Failed to load state file";
@@ -1604,6 +1713,7 @@ json DebugAdapter::LoadStateFile(const std::string& file_path)
         return result;
     }
 
+    emu_debug_state_restored();
     events_sync_input();
     rewind_reset();
 
@@ -1670,8 +1780,8 @@ json DebugAdapter::GetRewindStatus()
 
 json DebugAdapter::RewindSeek(int snapshot)
 {
-    if (emu_geartogear_is_active())
-        return {{"error", "Rewind is disabled while Gear-to-Gear is active"}};
+    if (emu_link_cable_is_active())
+        return {{"error", "Rewind is disabled while a link cable is active"}};
 
     bool paused = emu_is_paused() || emu_is_debug_idle();
 
@@ -1763,6 +1873,56 @@ json DebugAdapter::ControllerButton(int player, const std::string& button, const
     result["button"] = button;
     result["action"] = action;
 
+    return result;
+}
+
+json DebugAdapter::MarkIIIKey(const std::string& key, const std::string& action)
+{
+    json result;
+
+    if (action != "press" && action != "release")
+    {
+        result["error"] = "Invalid action (must be: press, release)";
+        return result;
+    }
+
+    std::string key_lower = key;
+    std::transform(key_lower.begin(), key_lower.end(), key_lower.begin(), ::tolower);
+
+    GS_MarkIII_Key markiii_key;
+
+    if (key_lower == "1")
+        markiii_key = MarkIIIKey1;
+    else if (key_lower == "2")
+        markiii_key = MarkIIIKey2;
+    else if (key_lower == "space")
+        markiii_key = MarkIIIKeySpace;
+    else if (key_lower == "return" || key_lower == "cr")
+        markiii_key = MarkIIIKeyReturn;
+    else
+    {
+        result["error"] = "Invalid Mark III key";
+        return result;
+    }
+
+    if (action == "press")
+    {
+        if (!m_core || m_core->GetLinkCableProtocol() != LinkCableProtocolMarkIII)
+        {
+            result["error"] = "Mark III link keyboard is not active";
+            return result;
+        }
+
+        emu_markiii_key_pressed(markiii_key);
+    }
+    else
+    {
+        emu_markiii_key_released(markiii_key);
+    }
+
+    result["success"] = true;
+    result["key"] = key_lower;
+    result["action"] = action;
     return result;
 }
 
@@ -2738,6 +2898,12 @@ json DebugAdapter::MemoryFind(int area, const std::string& value, bool text, boo
 json DebugAdapter::GetTraceLog(s64 start, int count)
 {
     json result;
+    const char* stop_reason = gui_debug_trace_logger_get_stop_reason();
+    result["enabled"] = gui_debug_trace_logger_is_enabled();
+
+    if (IsValidPointer(stop_reason))
+        result["stopped_by"] = stop_reason;
+
 
     TraceLogger* tl = m_core->GetTraceLogger();
     if (!tl)
@@ -2819,6 +2985,7 @@ json DebugAdapter::GetTraceLog(s64 start, int count)
 
 json DebugAdapter::SetTraceLog(const json& arguments)
 {
+    static const char* const k_vblank_watch_operations[] = { "read", "write", "read_write" };
     json result;
 
     TraceLogger* tl = m_core->GetTraceLogger();
@@ -2860,6 +3027,9 @@ json DebugAdapter::SetTraceLog(const json& arguments)
         else if (filter == "vdp.interrupts") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_INTERRUPTS; }
         else if (filter == "vdp.status") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_STATUS; }
         else if (filter == "vdp.sprites") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_SPRITES; }
+        else if (filter == "vdp.sprite_budget") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_SPRITE_BUDGET; }
+        else if (filter == "vdp.sprite_limit") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_SPRITE_LIMIT; }
+        else if (filter == "vdp.missed_vblank") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_MISSED_VBLANK; }
         else if (filter == "vdp.state") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_STATE; }
         else if (filter == "vdp.data") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_DATA; }
         else if (filter == "vdp.cram") { flags |= TRACE_FLAG_VDP; masks[TRACE_VDP] |= TRACE_VDP_EVENT_CRAM; }
@@ -2930,6 +3100,30 @@ json DebugAdapter::SetTraceLog(const json& arguments)
             return {{"error", "Invalid trace disk size"}};
     }
 
+    int vblank_watch_address_value = config_debug.trace_vblank_watch_address;
+    std::string vblank_watch_address = arguments.value("vblank_watch_address", "");
+    if (!vblank_watch_address.empty())
+    {
+        u16 address = 0;
+        if (!parse_hex_with_prefix(vblank_watch_address, &address))
+            return {{"error", "Invalid vblank watch address"}};
+        vblank_watch_address_value = address;
+    }
+
+    int vblank_watch_operation_value = config_debug.trace_vblank_watch_operation;
+    std::string vblank_watch_operation = arguments.value("vblank_watch_operation", "");
+    if (!vblank_watch_operation.empty())
+    {
+        vblank_watch_operation_value = -1;
+        for (int i = 0; i < 3; i++)
+        {
+            if (vblank_watch_operation == k_vblank_watch_operations[i])
+                vblank_watch_operation_value = i;
+        }
+        if (vblank_watch_operation_value < 0)
+            return {{"error", "Invalid vblank watch operation"}};
+    }
+
     std::string output_path = arguments.value("output_path", "");
     bool configuration_changed = output_value != config_debug.trace_output;
     if (output_value == gui_TraceOutput_Memory)
@@ -2949,6 +3143,8 @@ json DebugAdapter::SetTraceLog(const json& arguments)
         return {{"error", "Unable to configure trace logger"}};
 
     gui_debug_trace_logger_set_event_filters(masks);
+    config_debug.trace_vblank_watch_address = vblank_watch_address_value;
+    config_debug.trace_vblank_watch_operation = vblank_watch_operation_value;
     if (!gui_debug_trace_logger_start(flags))
         return {{"error", "Unable to start trace logger"}};
 
@@ -2957,8 +3153,291 @@ json DebugAdapter::SetTraceLog(const json& arguments)
     result["memory_size"] = gui_debug_trace_logger_memory_size_name(config_debug.trace_capacity);
     result["disk_size"] = gui_debug_trace_logger_disk_size_name(config_debug.trace_disk_size);
     result["filters"] = filters;
+    if ((masks[TRACE_VDP] & TRACE_VDP_EVENT_MISSED_VBLANK) != 0)
+    {
+        char address[8];
+        snprintf(address, sizeof(address), "%04X", config_debug.trace_vblank_watch_address);
+        result["vblank_watch_address"] = address;
+        result["vblank_watch_operation"] = k_vblank_watch_operations[config_debug.trace_vblank_watch_operation];
+    }
     if (config_debug.trace_output == gui_TraceOutput_Disk)
         result["output_path"] = gui_debug_trace_logger_get_output_path();
     result["total_entries"] = tl->GetCount();
+    return result;
+}
+
+struct ProfilerEntry
+{
+    u32 index;
+    u64 key;
+    std::string name;
+    const char* symbol;
+};
+
+static const char* const k_profiler_type_names[] = { "root", "halt", "call", "irq" };
+
+static bool profiler_entry_compare(const ProfilerEntry& a, const ProfilerEntry& b)
+{
+    if (a.key != b.key)
+        return a.key > b.key;
+    return a.index < b.index;
+}
+
+static double profiler_round(double value)
+{
+    return floor((value * 100.0) + 0.5) / 100.0;
+}
+
+json DebugAdapter::SetProfiler(const std::string& action)
+{
+    json result;
+
+    Profiler* profiler = m_core->GetProfiler();
+    if (!IsValidPointer(profiler))
+    {
+        result["error"] = "Profiler not available";
+        return result;
+    }
+
+    if (action == "start")
+    {
+        if (!config_debug.debug)
+        {
+            config_debug.debug = true;
+            emu_debug_continue();
+        }
+        gui_debug_profiler_show(true);
+    }
+    else if (action == "stop")
+        gui_debug_profiler_show(false);
+    else if (action == "reset")
+    {
+        profiler->Reset();
+        gui_debug_profiler_reset();
+    }
+    else
+    {
+        result["error"] = "Invalid profiler action";
+        return result;
+    }
+
+    result["success"] = true;
+    result["action"] = action;
+    result["window_open"] = config_debug.show_profiler;
+    return result;
+}
+
+json DebugAdapter::GetProfilerData(const std::string& sort, int count, const std::string& filter)
+{
+    json result;
+
+    Profiler* profiler = m_core->GetProfiler();
+    if (!IsValidPointer(profiler) || !IsValidPointer(profiler->GetFunctions()))
+    {
+        result["error"] = "Profiler not available";
+        return result;
+    }
+
+    if (count < 1)
+        count = 50;
+    if (count > 1000)
+        count = 1000;
+
+    profiler->Sync();
+
+    const GS_Profiler_Function* functions = profiler->GetFunctions();
+    u32 function_count = profiler->GetFunctionCount();
+    u64 total = profiler->GetTotalCycles();
+    u32 frame_cycles = gui_debug_profiler_get_frame_cycles();
+    double frames = (frame_cycles > 0) ? (double)total / (double)frame_cycles : 0.0;
+
+    std::string filter_upper = filter;
+    std::transform(filter_upper.begin(), filter_upper.end(), filter_upper.begin(), ::toupper);
+
+    std::vector<ProfilerEntry> entries;
+
+    for (u32 i = 0; i < function_count; i++)
+    {
+        const GS_Profiler_Function& function = functions[i];
+        bool pseudo = (function.type == PROFILER_FUNCTION_ROOT) || (function.type == PROFILER_FUNCTION_HALT);
+
+        ProfilerEntry entry;
+        entry.index = i;
+        entry.key = 0;
+        entry.symbol = "none";
+
+        if (function.type == PROFILER_FUNCTION_ROOT)
+            entry.name = "[Root]";
+        else if (function.type == PROFILER_FUNCTION_HALT)
+            entry.name = "[HALT]";
+        else
+        {
+            bool is_manual = false;
+            const char* name = gui_debug_get_symbol_name(function.bank, function.address, &is_manual);
+            if (IsValidPointer(name))
+            {
+                entry.name = name;
+                entry.symbol = is_manual ? "manual" : "auto";
+            }
+        }
+
+        if (!filter_upper.empty())
+        {
+            std::string name_upper = entry.name;
+            std::transform(name_upper.begin(), name_upper.end(), name_upper.begin(), ::toupper);
+
+            char address[8];
+            snprintf(address, sizeof(address), "%04X", function.address);
+
+            bool name_match = (name_upper.find(filter_upper) != std::string::npos);
+            bool address_match = !pseudo && (std::string(address).find(filter_upper) != std::string::npos);
+
+            if (!name_match && !address_match)
+                continue;
+        }
+
+        if (sort == "exclusive")
+            entry.key = function.exclusive_cycles;
+        else if (sort == "calls")
+            entry.key = function.calls;
+        else if (sort == "average")
+            entry.key = (function.completed > 0) ? function.inclusive_cycles / function.completed : 0;
+        else if (sort == "max")
+            entry.key = (function.completed > 0) ? function.max_cycles : 0;
+        else
+            entry.key = function.inclusive_cycles;
+
+        entries.push_back(entry);
+    }
+
+    std::sort(entries.begin(), entries.end(), profiler_entry_compare);
+
+    json functions_array = json::array();
+
+    for (size_t i = 0; (i < entries.size()) && (i < (size_t)count); i++)
+    {
+        const GS_Profiler_Function& function = functions[entries[i].index];
+        bool root = (function.type == PROFILER_FUNCTION_ROOT);
+        bool pseudo = root || (function.type == PROFILER_FUNCTION_HALT);
+        json item;
+        char text[16];
+
+        item["name"] = entries[i].name;
+        item["type"] = k_profiler_type_names[function.type];
+
+        if (!pseudo)
+        {
+            item["symbol"] = entries[i].symbol;
+            snprintf(text, sizeof(text), "%02X", function.bank);
+            item["bank"] = text;
+            snprintf(text, sizeof(text), "%04X", function.address);
+            item["address"] = text;
+        }
+
+        if (!root)
+        {
+            item["calls"] = function.calls;
+            item["calls_per_frame"] = (frames > 0.0) ? profiler_round((double)function.calls / frames) : 0.0;
+            item["inclusive_cycles"] = function.inclusive_cycles;
+            item["inclusive_percent"] = (total > 0) ? profiler_round(((double)function.inclusive_cycles * 100.0) / (double)total) : 0.0;
+        }
+
+        item["exclusive_cycles"] = function.exclusive_cycles;
+        item["exclusive_percent"] = (total > 0) ? profiler_round(((double)function.exclusive_cycles * 100.0) / (double)total) : 0.0;
+
+        if (!root && (function.completed > 0))
+        {
+            item["average_cycles"] = function.inclusive_cycles / function.completed;
+            item["min_cycles"] = function.min_cycles;
+            item["max_cycles"] = function.max_cycles;
+        }
+
+        functions_array.push_back(item);
+    }
+
+    result["collecting"] = profiler->IsEnabled();
+    result["window_open"] = config_debug.show_profiler;
+    result["total_cycles"] = total;
+    result["frame_cycles"] = frame_cycles;
+    result["frames"] = profiler_round(frames);
+    result["function_count"] = function_count - 2;
+    result["sort"] = sort;
+    result["count"] = functions_array.size();
+    result["functions"] = functions_array;
+
+    return result;
+}
+
+static json cheat_to_json(int index, const gui_CheatEntry* entry)
+{
+    json cheat;
+    cheat["index"] = index;
+    cheat["code"] = entry->code;
+    cheat["description"] = entry->description;
+    cheat["enabled"] = entry->enabled;
+    cheat["valid"] = gui_cheats_is_valid(entry->code);
+    return cheat;
+}
+
+json DebugAdapter::ListCheats()
+{
+    json result;
+    json cheats = json::array();
+    int count = gui_cheats_get_count();
+
+    for (int i = 0; i < count; i++)
+        cheats.push_back(cheat_to_json(i, gui_cheats_get(i)));
+
+    result["count"] = count;
+    result["max"] = GUI_CHEATS_MAX;
+    result["cheats"] = cheats;
+
+    return result;
+}
+
+json DebugAdapter::AddCheat(const std::string& code, const std::string& description)
+{
+    json result;
+    gui_CheatEntry entry;
+
+    if (!m_core || emu_is_media_loading() || !m_core->GetCartridge()->IsReady())
+    {
+        result["error"] = "No media loaded";
+        return result;
+    }
+
+    if ((code.length() >= sizeof(entry.code)) || !gui_cheats_is_valid(code.c_str()))
+    {
+        result["error"] = "Invalid cheat code. Use XXX-XXX, XXX-XXX-XXX, 00AAAADD, or AAAA:DD, join codes with +";
+        return result;
+    }
+
+    int index = gui_cheats_add(code.c_str(), description.c_str());
+
+    if (index < 0)
+    {
+        result["error"] = "Maximum number of cheats reached";
+        return result;
+    }
+
+    result = cheat_to_json(index, gui_cheats_get(index));
+    result["success"] = true;
+
+    return result;
+}
+
+json DebugAdapter::RemoveCheat(int index)
+{
+    json result;
+
+    if (!gui_cheats_remove(index))
+    {
+        result["error"] = "Invalid cheat index";
+        return result;
+    }
+
+    result["success"] = true;
+    result["count"] = gui_cheats_get_count();
+
     return result;
 }

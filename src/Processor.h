@@ -29,6 +29,7 @@
 class Memory;
 class IOPorts;
 class TraceLogger;
+class Profiler;
 
 class Processor
 {
@@ -38,8 +39,7 @@ public:
         GS_BREAKPOINT_TYPE_ROMRAM = 0,
         GS_BREAKPOINT_TYPE_VRAM,
         GS_BREAKPOINT_TYPE_VDP_REGISTER,
-        GS_BREAKPOINT_TYPE_CRAM,
-        GS_BREAKPOINT_TYPE_COUNT
+        GS_BREAKPOINT_TYPE_CRAM
     };
 
     struct GS_Breakpoint
@@ -105,7 +105,6 @@ public:
     void ClearProActionReplayCheats();
     ProcessorState* GetState();
     void SetDisassemblerSyntax(GS_Disassembler_Syntax syntax);
-    GS_Disassembler_Syntax GetDisassemblerSyntax() const;
     void DisassembleNextOPCode();
     void PopulateDisassemblerRecord(GS_Disassembler_Record* record, u16 address);
     void InvalidateOverlappingRecords(u16 address, u8 opcode_size);
@@ -123,10 +122,18 @@ public:
     bool IsBreakpoint(int type, u16 address);
     std::vector<GS_Breakpoint>* GetBreakpoints();
     void ClearDisassemblerCallStack();
+    void ResetDebuggerExecutionState();
     std::stack<GS_CallStackEntry>* GetDisassemblerCallStack();
     void CheckMemoryBreakpoints(int type, u16 address, bool read);
+    INLINE bool HasMemoryHooks(bool read) const;
+    INLINE void CheckCpuAddressHooks(u16 address, bool read);
+    void SetVBlankWatch(bool read, bool write, u16 address);
+    u32 UpdateVBlankWatch();
+    INLINE u16 GetVBlankWatchAddress() const;
+    INLINE bool GetVBlankWatchAccess(bool read) const;
     bool Halted();
     void SetTraceLogger(TraceLogger* pTraceLogger);
+    void SetProfiler(Profiler* pProfiler);
 
 private:
     typedef void (Processor::*OPCmemberptr) (void);
@@ -143,6 +150,7 @@ private:
     OPCptr m_OPCodesED[256];
     Memory* m_pMemory;
     TraceLogger* m_pTraceLogger;
+    Profiler* m_pProfiler;
     SixteenBitRegister AF;
     SixteenBitRegister BC;
     SixteenBitRegister DE;
@@ -179,6 +187,14 @@ private:
     bool m_bCycleAccurateHalt;
     bool m_breakpoints_enabled;
     bool m_breakpoints_irq_enabled;
+    bool m_memory_hooks_read;
+    bool m_memory_hooks_write;
+    bool m_vblank_watch_read;
+    bool m_vblank_watch_write;
+    u16 m_vblank_watch_address;
+    bool m_vblank_watch_hit;
+    bool m_vblank_watch_armed;
+    u32 m_vblank_watch_misses;
     bool m_cpu_breakpoint_hit;
     bool m_memory_breakpoint_hit;
     bool m_run_to_breakpoint_hit;
@@ -226,8 +242,11 @@ private:
     void InvalidOPCode();
     void UndocumentedOPCode();
     void CheckBreakpoints();
-    void PushCallStack(u16 src, u16 dest, u16 back, u16 bank);
-    void PopCallStack();
+    void RefreshMemoryHooks();
+    void ResetVBlankWatch();
+    void PushCallStack(u16 src, u16 dest, u16 back, u16 bank, u8 tstates, bool irq);
+    void PopCallStack(u8 tstates);
+    NO_INLINE void ProfilerEnter(u16 address, u32 pending_cycles, bool irq);
     void FormatDisassemblerDataBytes(char* text, size_t text_size, const u8* bytes, int size);
     void SetDisassemblerOperandText(GS_Disassembler_Record* record, const char* text);
     void SetDisassemblerOperand(GS_Disassembler_Record* record, u16 address, bool is_zp, const char* text);
@@ -248,7 +267,7 @@ private:
     void OPCodes_JP_nn_Conditional(bool condition);
     void OPCodes_JR_n();
     void OPCodes_JR_n_conditional(bool condition);
-    void OPCodes_RET();
+    void OPCodes_RET(u8 tstates);
     void OPCodes_RET_Conditional(bool condition);
     void OPCodes_IN_C(u8* reg);
     u8 OPCodes_INI();
@@ -930,6 +949,7 @@ const bool kZ80ParityTable[256] = {
 
 #include "Memory.h"
 #include "TraceLogger.h"
+#include "Profiler.h"
 #include "Processor_inline.h"
 
 #endif	/* PROCESSOR_H */

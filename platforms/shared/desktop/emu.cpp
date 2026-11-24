@@ -23,16 +23,19 @@
 #include <thread>
 #include <atomic>
 #include <string.h>
+#include <math.h>
 #include "gearsystem.h"
 #include "GameGearIOPorts.h"
 #include "sound_queue.h"
 #include "config.h"
 #include "rewind.h"
 #include "runahead.h"
+#include "video_recorder.h"
+#include "ogl_renderer.h"
 #include "events.h"
 #include "gui_debug_trace_logger.h"
 #include "mcp/mcp_manager.h"
-#include "geartogear/geartogear_manager.h"
+#include "link_cable/link_cable_manager.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #if defined(_WIN32)
@@ -42,14 +45,15 @@
 
 static GearsystemCore* gearsystem;
 static s16* audio_buffer;
-static bool audio_enabled;
 static McpManager* mcp_manager;
-static GearToGearManager* geartogear_manager;
-static bool geartogear_transport_applied;
-static bool geartogear_cable_applied;
-static bool geartogear_hardware_suspended;
+static LinkCableManager* link_cable_manager;
+static bool link_cable_transport_active;
+static bool link_cable_connected;
+static bool link_cable_hardware_suspended;
+static GS_LinkCable_Protocol link_cable_protocol;
 static Uint64 rewind_last_counter = 0;
 static double rewind_pop_accumulator = 0.0;
+static bool video_recording_output = false;
 
 enum Loading_State
 {
@@ -91,15 +95,16 @@ static void update_debug_background_buffer_sg1000(void);
 static void update_debug_tile_buffer_sg1000(void);
 static void update_debug_sprite_buffers_sg1000(void);
 static void debug_step_instruction(void);
+static void get_video_recording_size(const GS_RuntimeInfo& runtime, int* width, int* height);
 static void reset_rewind_timing(void);
 static int get_rewind_pop_budget(void);
-static void geartogear_publish_callback(u64 cycle, const GS_GearToGear_WireState* state, void* user_data);
-static bool geartogear_sample_callback(u64 cycle, GS_GearToGear_WireState* state, void* user_data);
-static bool geartogear_poll_callback(u64 through_cycle, GS_GearToGear_WireEvent* event, void* user_data);
-static void geartogear_fence_callback(u64 cycle, void* user_data);
-static void geartogear_sync_callback(u64 cycle, u32 lead_cycles, void* user_data);
-static void geartogear_suspend_hardware(void);
-static void geartogear_resume_hardware(void);
+static void link_cable_publish_callback(u64 cycle, const GS_LinkCable_WireState* state, void* user_data);
+static bool link_cable_sample_callback(u64 cycle, GS_LinkCable_WireState* state, void* user_data);
+static bool link_cable_poll_callback(u64 through_cycle, GS_LinkCable_WireEvent* event, void* user_data);
+static void link_cable_fence_callback(u64 cycle, void* user_data);
+static void link_cable_sync_callback(u64 cycle, u32 lead_cycles, void* user_data);
+static void link_cable_suspend_hardware(void);
+static void link_cable_resume_hardware(void);
 
 bool emu_init(void)
 {
@@ -112,23 +117,23 @@ bool emu_init(void)
     gearsystem = new GearsystemCore();
     gearsystem->Init();
 
-    geartogear_manager = new GearToGearManager();
-    geartogear_manager->SetNormalBarrierStallUs((u32)config_emulator.geartogear_stall_us);
-    geartogear_transport_applied = false;
-    geartogear_cable_applied = false;
-    geartogear_hardware_suspended = false;
-    gearsystem->SetGearToGearCallbacks(geartogear_publish_callback,
-        geartogear_sample_callback, geartogear_poll_callback,
-        geartogear_fence_callback, geartogear_sync_callback,
-        geartogear_manager);
+    link_cable_manager = new LinkCableManager();
+    link_cable_manager->SetNormalBarrierStallUs((u32)config_emulator.link_cable_stall_us);
+    link_cable_transport_active = false;
+    link_cable_connected = false;
+    link_cable_hardware_suspended = false;
+    link_cable_protocol = LinkCableProtocolNone;
+    gearsystem->SetLinkCableCallbacks(link_cable_publish_callback, link_cable_sample_callback,
+        link_cable_poll_callback, link_cable_fence_callback, link_cable_sync_callback, link_cable_manager);
 
     sound_queue_init();
 
     for (int i = 0; i < 5; i++)
         InitPointer(emu_savestates_screenshots[i].data);
 
-    audio_enabled = true;
     emu_audio_sync = true;
+    emu_audio_rate_control = false;
+    emu_audio_ratio = 1.0f;
     emu_debug_disable_breakpoints = false;
     emu_debug_irq_breakpoints = false;
     emu_debug_command = Debug_Command_None;
@@ -136,6 +141,7 @@ bool emu_init(void)
     emu_debug_pc_changed = false;
     emu_debug_step_frames_pending = 0;
     emu_frame_counter = 0;
+    emu_video_frame_counter = 0;
     emu_debug_tile_palette = 0;
 
     mcp_manager = new McpManager();
@@ -156,11 +162,12 @@ void emu_destroy(void)
     }
     loading_state.store(Loading_State_None);
 
+    emu_stop_video_recording();
     save_ram();
     rewind_destroy();
     runahead_destroy();
-    emu_geartogear_stop();
-    SafeDelete(geartogear_manager);
+    emu_link_cable_stop();
+    SafeDelete(link_cable_manager);
     SafeDelete(mcp_manager);
     SafeDeleteArray(audio_buffer);
     sound_queue_destroy();
@@ -183,8 +190,8 @@ void emu_load_media_async(const char* file_path, Cartridge::ForceConfiguration c
     if (loading_state.load() != Loading_State_None)
         return;
 
-    geartogear_suspend_hardware();
-    gui_debug_trace_logger_reset();
+    link_cable_suspend_hardware();
+    gui_debug_trace_logger_reset("media_change");
 
     emu_debug_command = Debug_Command_None;
     reset_buffers();
@@ -220,7 +227,7 @@ bool emu_finish_media_loading(void)
     }
 
     loading_state.store(Loading_State_None);
-    geartogear_resume_hardware();
+    link_cable_resume_hardware();
 
     if (!loading_result)
         return false;
@@ -237,17 +244,6 @@ bool emu_finish_media_loading(void)
     return true;
 }
 
-void emu_render_current_frame(void)
-{
-    if (emu_is_empty())
-        return;
-
-    gearsystem->RenderFrameBuffer(emu_frame_buffer);
-
-    if (config_debug.debug)
-        update_debug();
-}
-
 void emu_reset_rewind_timing(void)
 {
     reset_rewind_timing();
@@ -255,7 +251,7 @@ void emu_reset_rewind_timing(void)
 
 void emu_update(void)
 {
-    emu_geartogear_pump();
+    emu_link_cable_pump();
 
     if (loading_state.load() != Loading_State_None)
         return;
@@ -269,7 +265,7 @@ void emu_update(void)
     bool frame_executed = false;
     bool frame_completed = false;
 
-    if (!emu_geartogear_is_active() && rewind_is_active())
+    if (!emu_link_cable_is_active() && rewind_is_active())
     {
         int to_pop = get_rewind_pop_budget();
 
@@ -277,6 +273,7 @@ void emu_update(void)
         {
             if (!rewind_pop())
                 break;
+            emu_video_frame_counter++;
         }
 
         int silence_count = GS_AUDIO_QUEUE_SIZE;
@@ -358,7 +355,7 @@ void emu_update(void)
         {
             rewind_commit_seek();
 
-            int runahead = emu_geartogear_is_active() ? 0 : runahead_get_frames();
+            int runahead = emu_link_cable_is_active() ? 0 : runahead_get_frames();
             if (runahead > 0)
                 runahead_run(runahead, emu_frame_buffer, audio_buffer, &sampleCount);
             else
@@ -372,18 +369,36 @@ void emu_update(void)
     if (frame_executed)
     {
         if (frame_completed)
+        {
             emu_frame_counter++;
-        if (!emu_geartogear_is_active())
+            emu_video_frame_counter++;
+        }
+        if (!emu_link_cable_is_active())
             rewind_push();
+        if (video_recorder_is_recording())
+        {
+            video_recorder_add_audio(audio_buffer, sampleCount);
+            if (frame_completed)
+            {
+                if (video_recording_output)
+                    emu_video_recording_frame_pending = true;
+                else
+                {
+                    GS_RuntimeInfo runtime;
+                    emu_get_runtime(runtime);
+                    video_recorder_add_video(emu_frame_buffer, runtime.screen_width, runtime.screen_height, 4);
+                }
+            }
+        }
     }
 
     if ((sampleCount > 0) && !gearsystem->IsPaused())
     {
         bool sync_audio = emu_audio_sync &&
-            (!emu_geartogear_is_active() ||
-                !emu_geartogear_is_cable_connected() ||
-                emu_geartogear_is_pacing_peer());
-        sound_queue_write(audio_buffer, sampleCount, sync_audio);
+            (!emu_link_cable_is_active() ||
+                !emu_link_cable_is_cable_connected() ||
+                emu_link_cable_is_pacing_peer());
+        sound_queue_write(audio_buffer, sampleCount, sync_audio, emu_audio_rate_control, emu_audio_ratio, !emu_audio_sync);
     }
     else if (gearsystem->IsPaused())
     {
@@ -513,9 +528,17 @@ bool emu_is_empty(void)
     return !gearsystem->GetCartridge()->IsReady();
 }
 
-void emu_reset(Cartridge::ForceConfiguration config)
+void emu_save_persistent_data(void)
 {
-    gui_debug_trace_logger_reset();
+    save_ram();
+}
+
+void emu_reset(Cartridge::ForceConfiguration config, bool save_persistent_data)
+{
+    if (loading_state.load() != Loading_State_None)
+        return;
+
+    gui_debug_trace_logger_reset("reset");
     emu_debug_command = Debug_Command_None;
     emu_debug_halt_step_frames_pending = 0;
     emu_debug_step_frames_pending = 0;
@@ -524,15 +547,17 @@ void emu_reset(Cartridge::ForceConfiguration config)
     reset_buffers();
     reset_rewind_timing();
     emu_audio_reset();
-    save_ram();
+    if (save_persistent_data)
+        emu_save_persistent_data();
+    link_cable_suspend_hardware();
     gearsystem->ResetROM(&config);
     load_ram();
+    link_cable_resume_hardware();
     rewind_reset();
 }
 
 void emu_audio_mute(bool mute)
 {
-    audio_enabled = !mute;
     gearsystem->GetAudio()->Mute(mute);
 }
 
@@ -542,6 +567,14 @@ void emu_audio_set_master_volume(float volume)
 }
 
 void emu_audio_reset(void)
+{
+    if (sound_queue_is_open())
+        sound_queue_flush();
+    else
+        emu_audio_restart();
+}
+
+void emu_audio_restart(void)
 {
     sound_queue_stop();
     sound_queue_start(GS_AUDIO_SAMPLE_RATE, 2, GS_AUDIO_QUEUE_SIZE, config_audio.buffer_count);
@@ -555,11 +588,6 @@ void emu_audio_psg_volume(float volume)
 void emu_audio_fm_volume(float volume)
 {
     gearsystem->GetAudio()->SetFMVolume(volume);
-}
-
-bool emu_is_audio_enabled(void)
-{
-    return audio_enabled;
 }
 
 bool emu_is_audio_open(void)
@@ -577,8 +605,8 @@ void emu_load_ram(const char* file_path, Cartridge::ForceConfiguration config)
 {
     if (!emu_is_empty())
     {
-        emu_geartogear_stop();
-        gui_debug_trace_logger_reset();
+        emu_link_cable_stop();
+        gui_debug_trace_logger_reset("media_change");
         save_ram();
         gearsystem->ResetROM(&config);
         gearsystem->LoadRam(file_path, true);
@@ -586,61 +614,76 @@ void emu_load_ram(const char* file_path, Cartridge::ForceConfiguration config)
     }
 }
 
-void emu_save_state_slot(int index)
+bool emu_save_state_slot(int index)
 {
-    if (!emu_is_empty())
-    {
-        const char* dir = get_configurated_dir(config_emulator.savestates_dir_option, config_emulator.savestates_path.c_str());
-        gearsystem->SaveState(dir, index, true);
-        update_savestates_data();
-    }
+    if (emu_is_empty())
+        return false;
+
+    const char* dir = get_configurated_dir(config_emulator.savestates_dir_option, config_emulator.savestates_path.c_str());
+    bool saved = gearsystem->SaveState(dir, index, true);
+    update_savestates_data();
+    return saved;
 }
 
-void emu_load_state_slot(int index)
+bool emu_load_state_slot(int index)
 {
-    if (!emu_is_empty())
-    {
-        emu_geartogear_stop();
-        const char* dir = get_configurated_dir(config_emulator.savestates_dir_option, config_emulator.savestates_path.c_str());
-        if (gearsystem->LoadState(dir, index))
-        {
-            events_sync_input();
-            rewind_reset();
-        }
-    }
+    if (emu_is_empty())
+        return false;
+
+    emu_link_cable_stop();
+    const char* dir = get_configurated_dir(config_emulator.savestates_dir_option, config_emulator.savestates_path.c_str());
+
+    if (!gearsystem->LoadState(dir, index))
+        return false;
+
+    emu_debug_state_restored();
+    events_sync_input();
+    rewind_reset();
+    return true;
 }
 
-void emu_save_state_file(const char* file_path)
+bool emu_save_state_file(const char* file_path)
 {
-    if (!emu_is_empty())
-        gearsystem->SaveState(file_path, -1, true);
+    if (emu_is_empty())
+        return false;
+
+    return gearsystem->SaveState(file_path, -1, true);
 }
 
-void emu_load_state_file(const char* file_path)
+bool emu_load_state_file(const char* file_path)
 {
-    if (!emu_is_empty())
-    {
-        emu_geartogear_stop();
-        if (gearsystem->LoadState(file_path))
-        {
-            events_sync_input();
-            rewind_reset();
-        }
-    }
+    if (emu_is_empty())
+        return false;
+
+    emu_link_cable_stop();
+
+    if (!gearsystem->LoadState(file_path))
+        return false;
+
+    emu_debug_state_restored();
+    events_sync_input();
+    rewind_reset();
+    return true;
 }
 
 void update_savestates_data(void)
 {
     emu_savestates_generation++;
 
+    for (int i = 0; i < 5; i++)
+    {
+        emu_savestates[i].rom_name[0] = 0;
+        SafeDeleteArray(emu_savestates_screenshots[i].data);
+        emu_savestates_screenshots[i].width = 0;
+        emu_savestates_screenshots[i].height = 0;
+        emu_savestates_screenshots[i].size = 0;
+    }
+
     if (emu_is_empty())
         return;
 
     for (int i = 0; i < 5; i++)
     {
-        emu_savestates[i].rom_name[0] = 0;
-        SafeDeleteArray(emu_savestates_screenshots[i].data);
-
         const char* dir = get_configurated_dir(config_emulator.savestates_dir_option, config_emulator.savestates_path.c_str());
 
         if (!gearsystem->GetSaveStateHeader(i + 1, dir, &emu_savestates[i]))
@@ -650,7 +693,11 @@ void update_savestates_data(void)
         {
             emu_savestates_screenshots[i].data = new u8[emu_savestates[i].screenshot_size];
             emu_savestates_screenshots[i].size = emu_savestates[i].screenshot_size;
-            gearsystem->GetSaveStateScreenshot(i + 1, dir, &emu_savestates_screenshots[i]);
+            bool loaded = gearsystem->GetSaveStateScreenshot(i + 1, dir, &emu_savestates_screenshots[i]);
+            size_t expected_size = (size_t)emu_savestates_screenshots[i].width * emu_savestates_screenshots[i].height * 4;
+
+            if (!loaded || (emu_savestates_screenshots[i].size != expected_size))
+                SafeDeleteArray(emu_savestates_screenshots[i].data);
         }
     }
 }
@@ -722,6 +769,15 @@ void emu_get_info(char* info, int buffer_size)
 GearsystemCore* emu_get_core(void)
 {
     return gearsystem;
+}
+
+void emu_debug_state_restored(void)
+{
+    emu_get_core()->GetProcessor()->ResetDebuggerExecutionState();
+    emu_debug_command = Debug_Command_None;
+    emu_debug_step_frames_pending = 0;
+    emu_debug_halt_step_frames_pending = 0;
+    emu_debug_pc_changed = true;
 }
 
 void emu_debug_step_over(void)
@@ -803,11 +859,6 @@ void emu_debug_continue(void)
     gearsystem->Pause(false);
     emu_debug_halt_step_frames_pending = 0;
     emu_debug_command = Debug_Command_Continue;
-}
-
-bool emu_debug_halt_step_active(void)
-{
-    return emu_debug_halt_step_frames_pending > 0;
 }
 
 void emu_set_disassembler_syntax(int syntax)
@@ -929,17 +980,20 @@ void emu_disable_ym2413(bool disable)
     gearsystem->GetAudio()->DisableYM2413(disable);
 }
 
-void emu_save_screenshot(const char* file_path)
+bool emu_save_screenshot(const char* file_path)
 {
     if (!gearsystem->GetCartridge()->IsReady())
-        return;
+        return false;
 
     GS_RuntimeInfo runtime;
     emu_get_runtime(runtime);
 
-    stbi_write_png(file_path, runtime.screen_width, runtime.screen_height, 4, emu_frame_buffer, runtime.screen_width * 4);
+    if (!stbi_write_png(file_path, runtime.screen_width, runtime.screen_height, 4, emu_frame_buffer,
+        runtime.screen_width * 4))
+        return false;
 
     Log("Screenshot saved to %s", file_path);
+    return true;
 }
 
 int emu_get_screenshot_png(unsigned char** out_buffer)
@@ -1003,10 +1057,10 @@ int emu_get_sprite_png(int sprite_index, unsigned char** out_buffer)
     return len;
 }
 
-void emu_save_sprite(const char* file_path, int index)
+bool emu_save_sprite(const char* file_path, int index)
 {
     if (!gearsystem->GetCartridge()->IsReady())
-        return;
+        return false;
 
     update_debug_sprites();
 
@@ -1015,27 +1069,31 @@ void emu_save_sprite(const char* file_path, int index)
 
     u8* buffer = emu_debug_sprite_buffers[index];
 
-    stbi_write_png(file_path, width, height, 4, buffer, 16 * 4);
+    if (!stbi_write_png(file_path, width, height, 4, buffer, 16 * 4))
+        return false;
 
     Log("Sprite saved to %s", file_path);
+    return true;
 }
 
-void emu_save_background(const char* file_path)
+bool emu_save_background(const char* file_path)
 {
     if (!gearsystem->GetCartridge()->IsReady())
-        return;
+        return false;
 
     update_debug_background();
 
-    stbi_write_png(file_path, 256, 256, 4, emu_debug_background_buffer, 256 * 4);
+    if (!stbi_write_png(file_path, 256, 256, 4, emu_debug_background_buffer, 256 * 4))
+        return false;
 
     Log("Background saved to %s", file_path);
+    return true;
 }
 
-void emu_save_tiles(const char* file_path)
+bool emu_save_tiles(const char* file_path)
 {
     if (!gearsystem->GetCartridge()->IsReady())
-        return;
+        return false;
 
     update_debug_tiles();
 
@@ -1044,9 +1102,11 @@ void emu_save_tiles(const char* file_path)
     int width = 32 * 8;
     int height = lines * 8;
 
-    stbi_write_png(file_path, width, height, 4, emu_debug_tile_buffer, width * 4);
+    if (!stbi_write_png(file_path, width, height, 4, emu_debug_tile_buffer, width * 4))
+        return false;
 
     Log("Pattern table saved to %s", file_path);
+    return true;
 }
 
 static void save_ram(void)
@@ -1564,10 +1624,10 @@ static void update_debug_sprite_buffers_sg1000(void)
     }
 }
 
-void emu_start_vgm_recording(const char* file_path)
+bool emu_start_vgm_recording(const char* file_path)
 {
     if (!gearsystem->GetCartridge()->IsReady())
-        return;
+        return false;
 
     if (gearsystem->GetAudio()->IsVgmRecording())
     {
@@ -1594,10 +1654,11 @@ void emu_start_vgm_recording(const char* file_path)
     metadata.game_name = cartridge->IsInGameDatabase() ? cartridge->GetGameDatabaseName() : cartridge->GetFileName();
     metadata.comment = "Created with " GS_TITLE " " GS_VERSION;
 
-    if (gearsystem->GetAudio()->StartVgmRecording(file_path, clock_rate, is_pal, has_ym2413, metadata))
-    {
-        Log("VGM recording started: %s", file_path);
-    }
+    if (!gearsystem->GetAudio()->StartVgmRecording(file_path, clock_rate, is_pal, has_ym2413, metadata))
+        return false;
+
+    Log("VGM recording started: %s", file_path);
+    return true;
 }
 
 void emu_stop_vgm_recording(void)
@@ -1612,6 +1673,80 @@ void emu_stop_vgm_recording(void)
 bool emu_is_vgm_recording(void)
 {
     return gearsystem->GetAudio()->IsVgmRecording();
+}
+
+bool emu_start_video_recording(const char* file_path)
+{
+    if (!gearsystem->GetCartridge()->IsReady())
+        return false;
+
+    if (video_recorder_is_recording())
+        emu_stop_video_recording();
+
+    GS_RuntimeInfo runtime;
+    emu_get_runtime(runtime);
+
+    int width = 0;
+    int height = 0;
+    video_recording_output = ogl_renderer_get_output_size(&width, &height) && (width > 1) && (height > 1);
+    emu_video_recording_frame_pending = false;
+
+    if (video_recording_output)
+    {
+        width &= ~1;
+        height &= ~1;
+    }
+    else
+        get_video_recording_size(runtime, &width, &height);
+
+    if (!video_recorder_start(file_path, width, height, emu_get_frame_rate(), GS_AUDIO_SAMPLE_RATE, (Video_Recorder_Quality)config_video.recording_quality))
+        return false;
+
+    Log("Video recording started: %s (%dx%d%s)", file_path, width, height, video_recording_output ? ", shader output" : "");
+    return true;
+}
+
+void emu_stop_video_recording(void)
+{
+    if (video_recorder_is_recording())
+    {
+        video_recorder_stop();
+        Log("Video recording stopped");
+    }
+}
+
+bool emu_is_video_recording(void)
+{
+    return video_recorder_is_recording();
+}
+
+static void get_video_recording_size(const GS_RuntimeInfo& runtime, int* width, int* height)
+{
+    int selected_ratio = config_debug.debug ? 0 : config_video.ratio;
+    float ratio = 0.0f;
+
+    if (config_video.recording_ratio > 0)
+        selected_ratio = config_video.recording_ratio - 1;
+
+    switch (selected_ratio)
+    {
+        case 1:
+            ratio = 4.0f / 3.0f;
+            break;
+        case 2:
+            ratio = 16.0f / 9.0f;
+            break;
+        case 3:
+            ratio = 16.0f / 10.0f;
+            break;
+        default:
+            ratio = (float)runtime.screen_width / (float)runtime.screen_height;
+    }
+
+    *height = runtime.screen_height * config_video.recording_scale;
+    *width = (int)roundf((float)*height * ratio);
+    *width += *width & 1;
+    *height += *height & 1;
 }
 
 void emu_mcp_set_transport(int mode, int tcp_port, const char* tcp_address)
@@ -1658,14 +1793,14 @@ void emu_mcp_pump_commands(void)
         mcp_manager->PumpCommands(gearsystem);
 }
 
-bool emu_geartogear_connect(int session)
+bool emu_link_cable_connect(int session)
 {
-    if (!geartogear_manager || !gearsystem)
+    if (!link_cable_manager || !gearsystem)
         return false;
 
     if (session < 1 || session > 255)
     {
-        Error("Gear-to-Gear session must be between 1 and 255");
+        Error("Link cable session must be between 1 and 255");
         return false;
     }
 
@@ -1674,172 +1809,232 @@ bool emu_geartogear_connect(int session)
 
     rewind_reset();
 
-    geartogear_manager->SetNormalBarrierStallUs(
-        (u32)config_emulator.geartogear_stall_us);
-    u64 cycle = gearsystem->GetGearToGearCycles();
+    link_cable_manager->SetNormalBarrierStallUs((u32)config_emulator.link_cable_stall_us);
+    u64 cycle = gearsystem->GetLinkCableCycles();
 
-    bool started = geartogear_manager->Connect((u8)session, cycle);
+    bool started = link_cable_manager->Connect((u8)session, cycle);
 
-    emu_geartogear_pump();
+    emu_link_cable_pump();
 
     return started;
 }
 
-void emu_geartogear_stop(void)
+void emu_link_cable_stop(void)
 {
-    u64 cycle = gearsystem ? gearsystem->GetGearToGearCycles() : 0;
+    u64 cycle = gearsystem ? gearsystem->GetLinkCableCycles() : 0;
 
-    if (geartogear_manager)
-        geartogear_manager->Stop();
+    if (link_cable_manager)
+        link_cable_manager->Stop();
 
-    if (gearsystem && geartogear_cable_applied)
-        gearsystem->SetGearToGearCableConnected(false, cycle);
+    if (gearsystem)
+        gearsystem->SetLinkCableProtocol(LinkCableProtocolNone, cycle);
 
-    if (gearsystem && geartogear_transport_applied)
-        gearsystem->SetGearToGearTransportActive(false, cycle);
-
-    geartogear_cable_applied = false;
-    geartogear_transport_applied = false;
+    link_cable_connected = false;
+    link_cable_transport_active = false;
+    link_cable_protocol = LinkCableProtocolNone;
+    events_release_markiii_input();
 }
 
-void emu_geartogear_pump(void)
+void emu_markiii_key_pressed(GS_MarkIII_Key key)
 {
-    if (!geartogear_manager || !gearsystem)
+    if (gearsystem && !link_cable_hardware_suspended)
+        gearsystem->MarkIIIKeyPressed(key);
+}
+
+void emu_markiii_key_released(GS_MarkIII_Key key)
+{
+    if (gearsystem && !link_cable_hardware_suspended)
+        gearsystem->MarkIIIKeyReleased(key);
+}
+
+void emu_link_cable_pump(void)
+{
+    if (!link_cable_manager || !gearsystem)
         return;
 
-    u64 cycle = gearsystem->GetGearToGearCycles();
-    geartogear_manager->Pump(cycle);
+    u64 cycle = gearsystem->GetLinkCableCycles();
+    link_cable_manager->Pump(cycle);
+
+    if (link_cable_hardware_suspended)
+        return;
+
+    bool active = link_cable_manager->IsActive();
+    GS_LinkCable_Protocol protocol = active ? emu_link_cable_get_protocol() : LinkCableProtocolNone;
+
+    if (protocol != link_cable_protocol)
+    {
+        events_release_markiii_input();
+        gearsystem->SetLinkCableProtocol(protocol, cycle);
+        link_cable_connected = false;
+        link_cable_transport_active = false;
+        link_cable_protocol = protocol;
+    }
 
     bool emulation_running = !gearsystem->IsPaused() &&
         (!config_debug.debug || emu_debug_command != Debug_Command_None);
-    bool hardware_ready = !geartogear_hardware_suspended &&
-        gearsystem->IsNativeGameGearMode() && emulation_running;
-    geartogear_manager->SetHardwareReady(hardware_ready, cycle);
+    bool hardware_ready = protocol != LinkCableProtocolNone && emulation_running;
+    link_cable_manager->SetHardwareReady(hardware_ready, cycle, protocol);
+    active = link_cable_manager->IsActive();
 
-    bool local_changed = geartogear_manager->ConsumeLocalAttachmentChanged();
-    bool remote_changed = geartogear_manager->ConsumeRemoteIdentityChanged();
-    bool active = geartogear_manager->IsActive();
-    bool transport_active = active && geartogear_manager->IsHardwareReady();
-    bool cable_connected = geartogear_manager->IsCableConnected();
+    bool local_changed = link_cable_manager->ConsumeLocalAttachmentChanged();
+    bool remote_changed = link_cable_manager->ConsumeRemoteIdentityChanged();
+    bool transport_active = active && link_cable_manager->IsHardwareReady();
+    bool cable_connected = link_cable_manager->IsCableConnected();
 
     if (!active)
     {
-        if (geartogear_cable_applied)
-            gearsystem->SetGearToGearCableConnected(false, cycle);
-        if (geartogear_transport_applied)
-            gearsystem->SetGearToGearTransportActive(false, cycle);
-        geartogear_cable_applied = false;
-        geartogear_transport_applied = false;
+        if (link_cable_connected)
+            gearsystem->SetLinkCableConnected(false, cycle);
+        if (link_cable_transport_active)
+            gearsystem->SetLinkCableTransportActive(false, cycle);
+        if (link_cable_protocol != LinkCableProtocolNone)
+            gearsystem->SetLinkCableProtocol(LinkCableProtocolNone, cycle);
+
+        link_cable_connected = false;
+        link_cable_transport_active = false;
+        link_cable_protocol = LinkCableProtocolNone;
         return;
     }
 
-    if ((local_changed || remote_changed) && geartogear_cable_applied)
+    if ((local_changed || remote_changed) && link_cable_connected)
     {
-        gearsystem->SetGearToGearCableConnected(false, cycle);
-        geartogear_cable_applied = false;
+        gearsystem->SetLinkCableConnected(false, cycle);
+        link_cable_connected = false;
     }
 
-    if (transport_active != geartogear_transport_applied || local_changed)
+    if (transport_active != link_cable_transport_active || local_changed)
     {
-        gearsystem->SetGearToGearTransportActive(transport_active, cycle);
-        geartogear_transport_applied = transport_active;
+        gearsystem->SetLinkCableTransportActive(transport_active, cycle);
+        link_cable_transport_active = transport_active;
     }
 
-    if (cable_connected != geartogear_cable_applied)
+    if (cable_connected != link_cable_connected)
     {
-        gearsystem->SetGearToGearCableConnected(cable_connected, cycle);
-        geartogear_cable_applied = cable_connected;
+        gearsystem->SetLinkCableConnected(cable_connected, cycle);
+        link_cable_connected = cable_connected;
     }
 }
 
-bool emu_geartogear_is_active(void)
+GS_LinkCable_Protocol emu_link_cable_get_protocol(void)
 {
-    return geartogear_manager && geartogear_manager->IsActive();
+    if (!gearsystem || link_cable_hardware_suspended)
+        return LinkCableProtocolNone;
+
+    if (config_emulator.link_cable_protocol == 0)
+        return gearsystem->GetDetectedLinkCableProtocol();
+
+    GS_LinkCable_Protocol protocol = (GS_LinkCable_Protocol)config_emulator.link_cable_protocol;
+    return protocol == gearsystem->GetSupportedLinkCableProtocol() ? protocol : LinkCableProtocolNone;
 }
 
-bool emu_geartogear_is_cable_connected(void)
+bool emu_link_cable_is_active(void)
 {
-    return geartogear_manager && geartogear_manager->IsCableConnected();
+    return link_cable_manager && link_cable_manager->IsActive();
 }
 
-bool emu_geartogear_is_pacing_peer(void)
+bool emu_link_cable_is_cable_connected(void)
 {
-    return geartogear_manager && geartogear_manager->IsPacingPeer();
+    return link_cable_manager && link_cable_manager->IsCableConnected();
 }
 
-GearToGearStatus emu_geartogear_get_status(void)
+bool emu_link_cable_is_pacing_peer(void)
 {
-    if (geartogear_manager)
-        return geartogear_manager->GetStatus();
+    return link_cable_manager && link_cable_manager->IsPacingPeer();
+}
 
-    GearToGearStatus status = {};
-    status.mode = GearToGearModeDisabled;
+LinkCableStatus emu_link_cable_get_status(void)
+{
+    if (link_cable_manager)
+        return link_cable_manager->GetStatus();
+
+    LinkCableStatus status = {};
+    status.mode = LinkCableModeDisabled;
     return status;
 }
 
 GS_GearToGear_DebugState emu_geartogear_get_debug_state(void)
 {
     GS_GearToGear_DebugState state = {};
-    if (gearsystem && gearsystem->GetGameGearIOPorts())
+
+    if (gearsystem && !link_cable_hardware_suspended && gearsystem->GetGameGearIOPorts())
         state = gearsystem->GetGameGearIOPorts()->GetGearToGearDebugState();
+
     return state;
 }
 
-void emu_geartogear_reset_metrics(void)
+GS_MarkIII_LinkDebugState emu_markiii_link_get_debug_state(void)
 {
-    if (geartogear_manager)
-        geartogear_manager->ResetMetrics();
+    GS_MarkIII_LinkDebugState state = {};
+
+    if (gearsystem && !link_cable_hardware_suspended && gearsystem->GetMarkIIILink())
+        state = gearsystem->GetMarkIIILink()->GetDebugState();
+
+    return state;
 }
 
-void emu_geartogear_set_normal_barrier_stall_us(u32 stall_us)
+void emu_link_cable_reset_metrics(void)
 {
-    if (geartogear_manager)
-        geartogear_manager->SetNormalBarrierStallUs(stall_us);
+    if (link_cable_manager)
+        link_cable_manager->ResetMetrics();
 }
 
-static void geartogear_suspend_hardware(void)
+void emu_link_cable_set_normal_barrier_stall_us(u32 stall_us)
 {
-    geartogear_hardware_suspended = true;
-    emu_geartogear_pump();
+    if (link_cable_manager)
+        link_cable_manager->SetNormalBarrierStallUs(stall_us);
 }
 
-static void geartogear_resume_hardware(void)
+static void link_cable_suspend_hardware(void)
 {
-    geartogear_hardware_suspended = false;
-    emu_geartogear_pump();
+    u64 cycle = gearsystem->GetLinkCableCycles();
+    link_cable_manager->SetHardwareReady(false, cycle, LinkCableProtocolNone);
+    gearsystem->SetLinkCableProtocol(LinkCableProtocolNone, cycle);
+    events_release_markiii_input();
+
+    link_cable_connected = false;
+    link_cable_transport_active = false;
+    link_cable_protocol = LinkCableProtocolNone;
+    link_cable_hardware_suspended = true;
 }
 
-static void geartogear_publish_callback(u64 cycle, const GS_GearToGear_WireState* state, void* user_data)
+static void link_cable_resume_hardware(void)
 {
-    GearToGearManager* manager = (GearToGearManager*)user_data;
+    link_cable_hardware_suspended = false;
+    emu_link_cable_pump();
+}
+
+static void link_cable_publish_callback(u64 cycle, const GS_LinkCable_WireState* state, void* user_data)
+{
+    LinkCableManager* manager = (LinkCableManager*)user_data;
+
     if (manager && state)
         manager->PublishState(cycle, *state);
 }
 
-static bool geartogear_sample_callback(u64 cycle, GS_GearToGear_WireState* state, void* user_data)
+static bool link_cable_sample_callback(u64 cycle, GS_LinkCable_WireState* state, void* user_data)
 {
-    GearToGearManager* manager = (GearToGearManager*)user_data;
-    return manager && state ? manager->SampleRemoteState(cycle, *state) :
-        false;
+    LinkCableManager* manager = (LinkCableManager*)user_data;
+    return manager && state ? manager->SampleRemoteState(cycle, *state) : false;
 }
 
-static bool geartogear_poll_callback(u64 through_cycle, GS_GearToGear_WireEvent* event, void* user_data)
+static bool link_cable_poll_callback(u64 through_cycle, GS_LinkCable_WireEvent* event, void* user_data)
 {
-    GearToGearManager* manager = (GearToGearManager*)user_data;
-    return manager && event ? manager->PollRemoteEvent(through_cycle,
-        *event) : false;
+    LinkCableManager* manager = (LinkCableManager*)user_data;
+    return manager && event ? manager->PollRemoteEvent(through_cycle, *event) : false;
 }
 
-static void geartogear_fence_callback(u64 cycle, void* user_data)
+static void link_cable_fence_callback(u64 cycle, void* user_data)
 {
-    GearToGearManager* manager = (GearToGearManager*)user_data;
+    LinkCableManager* manager = (LinkCableManager*)user_data;
+
     if (manager)
         manager->Fence(cycle);
 }
 
-static void geartogear_sync_callback(u64 cycle, u32 lead_cycles, void* user_data)
+static void link_cable_sync_callback(u64 cycle, u32 lead_cycles, void* user_data)
 {
-    GearToGearManager* manager = (GearToGearManager*)user_data;
+    LinkCableManager* manager = (LinkCableManager*)user_data;
+
     if (manager)
         manager->Synchronize(cycle, lead_cycles);
 }
